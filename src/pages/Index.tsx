@@ -107,12 +107,15 @@ const ScriptDNA = () => {
           </div>
           <aside className="lg:col-span-5">
             <div className="rounded-sm border border-ink/15 bg-card p-6 shadow-print">
-              <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink-soft mb-3">How it works</div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink-soft mb-3">The Agent · LangGraph pipeline</div>
               <ol className="space-y-3 text-sm text-ink">
                 {[
-                  ["01", "Retrieval", "Match your project to films by genre and beat architecture."],
-                  ["02", "Diagnosis", "LLM ranks 10 closest structural ancestors via tool-calling."],
-                  ["03", "Prescription", "Get a beat heatmap, midpoint risk score, and an act-3 fix."],
+                  ["01", "Planner", "Decides which genres and structural keywords to retrieve."],
+                  ["02", "Retriever", "RAG over the curated film corpus by genre overlap."],
+                  ["03", "Beat Critic", "Selects 10 ancestors, rates each beat 0–100."],
+                  ["04", "Risk Scorer", "Predicts midpoint collapse probability."],
+                  ["05", "Prescriber", "Drafts 3 surgical act-3 moves."],
+                  ["06", "Note Writer", "Produces the development note."],
                 ].map(([n, t, d]) => (
                   <li key={n} className="flex gap-3">
                     <span className="font-mono text-[10px] text-oxblood mt-1">{n}</span>
