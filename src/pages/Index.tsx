@@ -33,10 +33,14 @@ const SAMPLE = {
     "Act 1: Mira lives quietly restoring art. Her ex Daniel reappears with proof of her old crimes. She agrees to one job.\nAct 2A: The crew assembles, scouts the museum, plans the lift around a charity gala.\nMidpoint: The painting they're stealing is a forgery — Mira's own.\nAct 2B: Daniel was working a side angle. Mira goes off-script.\nAct 3: Confrontation in the vault. Mira walks out with the real piece, leaves Daniel for the law.",
 };
 
+interface TraceStep { node: string; ms: number; summary: string }
+
 const ScriptDNA = () => {
   const [form, setForm] = useState({ title: "", genre: "", logline: "", outline: "" });
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<DnaReport | null>(null);
+  const [trace, setTrace] = useState<TraceStep[]>([]);
+  const [plan, setPlan] = useState<{ search_genres: string[]; structural_keywords: string[]; reasoning: string } | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,11 +50,16 @@ const ScriptDNA = () => {
     }
     setLoading(true);
     setReport(null);
+    setTrace([]);
+    setPlan(null);
     try {
       const { data, error } = await supabase.functions.invoke("analyse-script", { body: form });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      setReport((data as any).report as DnaReport);
+      const d = data as any;
+      setReport(d.report as DnaReport);
+      setTrace((d.trace as TraceStep[]) ?? []);
+      setPlan(d.plan ?? null);
       setTimeout(() => document.getElementById("report")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (err: any) {
       toast.error(err?.message || "Something went wrong");
