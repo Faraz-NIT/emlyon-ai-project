@@ -33,10 +33,14 @@ const SAMPLE = {
     "Act 1: Mira lives quietly restoring art. Her ex Daniel reappears with proof of her old crimes. She agrees to one job.\nAct 2A: The crew assembles, scouts the museum, plans the lift around a charity gala.\nMidpoint: The painting they're stealing is a forgery — Mira's own.\nAct 2B: Daniel was working a side angle. Mira goes off-script.\nAct 3: Confrontation in the vault. Mira walks out with the real piece, leaves Daniel for the law.",
 };
 
+interface TraceStep { node: string; ms: number; summary: string }
+
 const ScriptDNA = () => {
   const [form, setForm] = useState({ title: "", genre: "", logline: "", outline: "" });
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<DnaReport | null>(null);
+  const [trace, setTrace] = useState<TraceStep[]>([]);
+  const [plan, setPlan] = useState<{ search_genres: string[]; structural_keywords: string[]; reasoning: string } | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,11 +50,16 @@ const ScriptDNA = () => {
     }
     setLoading(true);
     setReport(null);
+    setTrace([]);
+    setPlan(null);
     try {
       const { data, error } = await supabase.functions.invoke("analyse-script", { body: form });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      setReport((data as any).report as DnaReport);
+      const d = data as any;
+      setReport(d.report as DnaReport);
+      setTrace((d.trace as TraceStep[]) ?? []);
+      setPlan(d.plan ?? null);
       setTimeout(() => document.getElementById("report")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (err: any) {
       toast.error(err?.message || "Something went wrong");
@@ -71,7 +80,7 @@ const ScriptDNA = () => {
             </span>
           </div>
           <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
-            RAG · 59 reference films
+            LangGraph Agent · 6 nodes · RAG over 59 films
           </span>
         </div>
       </header>
@@ -98,12 +107,15 @@ const ScriptDNA = () => {
           </div>
           <aside className="lg:col-span-5">
             <div className="rounded-sm border border-ink/15 bg-card p-6 shadow-print">
-              <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink-soft mb-3">How it works</div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink-soft mb-3">The Agent · LangGraph pipeline</div>
               <ol className="space-y-3 text-sm text-ink">
                 {[
-                  ["01", "Retrieval", "Match your project to films by genre and beat architecture."],
-                  ["02", "Diagnosis", "LLM ranks 10 closest structural ancestors via tool-calling."],
-                  ["03", "Prescription", "Get a beat heatmap, midpoint risk score, and an act-3 fix."],
+                  ["01", "Planner", "Decides which genres and structural keywords to retrieve."],
+                  ["02", "Retriever", "RAG over the curated film corpus by genre overlap."],
+                  ["03", "Beat Critic", "Selects 10 ancestors, rates each beat 0–100."],
+                  ["04", "Risk Scorer", "Predicts midpoint collapse probability."],
+                  ["05", "Prescriber", "Drafts 3 surgical act-3 moves."],
+                  ["06", "Note Writer", "Produces the development note."],
                 ].map(([n, t, d]) => (
                   <li key={n} className="flex gap-3">
                     <span className="font-mono text-[10px] text-oxblood mt-1">{n}</span>
@@ -202,6 +214,43 @@ const ScriptDNA = () => {
           </div>
         </form>
       </section>
+
+      {/* Agent trace */}
+      {trace.length > 0 && (
+        <section className="bg-ink text-paper border-t border-ink/40">
+          <div className="mx-auto max-w-7xl px-6 py-12">
+            <div className="flex items-baseline justify-between flex-wrap gap-3 mb-6">
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber mb-2">
+                  LangGraph Trace
+                </div>
+                <h3 className="font-display text-2xl text-paper">Agent execution</h3>
+              </div>
+              {plan && (
+                <div className="text-xs text-paper/60 font-mono max-w-md text-right">
+                  Planner → genres: <span className="text-amber">{plan.search_genres.join(", ")}</span>
+                </div>
+              )}
+            </div>
+            <ol className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+              {trace.map((s, i) => (
+                <li
+                  key={i}
+                  className="border border-paper/10 bg-paper/[0.03] rounded-sm p-4 hover:bg-paper/[0.06] transition-colors"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber">
+                      {String(i + 1).padStart(2, "0")} · {s.node}
+                    </span>
+                    <span className="font-mono text-[10px] text-paper/50 tabular-nums">{s.ms}ms</span>
+                  </div>
+                  <p className="mt-2 text-sm text-paper/85 leading-snug">{s.summary}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+      )}
 
       {/* Report */}
       {report && (
