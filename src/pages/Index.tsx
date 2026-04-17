@@ -80,7 +80,7 @@ const ScriptDNA = () => {
             </span>
           </div>
           <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
-            RAG · 59 reference films
+            LangGraph Agent · 6 nodes · RAG over 59 films
           </span>
         </div>
       </header>
@@ -211,6 +211,43 @@ const ScriptDNA = () => {
           </div>
         </form>
       </section>
+
+      {/* Agent trace */}
+      {trace.length > 0 && (
+        <section className="bg-ink text-paper border-t border-ink/40">
+          <div className="mx-auto max-w-7xl px-6 py-12">
+            <div className="flex items-baseline justify-between flex-wrap gap-3 mb-6">
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber mb-2">
+                  LangGraph Trace
+                </div>
+                <h3 className="font-display text-2xl text-paper">Agent execution</h3>
+              </div>
+              {plan && (
+                <div className="text-xs text-paper/60 font-mono max-w-md text-right">
+                  Planner → genres: <span className="text-amber">{plan.search_genres.join(", ")}</span>
+                </div>
+              )}
+            </div>
+            <ol className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+              {trace.map((s, i) => (
+                <li
+                  key={i}
+                  className="border border-paper/10 bg-paper/[0.03] rounded-sm p-4 hover:bg-paper/[0.06] transition-colors"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber">
+                      {String(i + 1).padStart(2, "0")} · {s.node}
+                    </span>
+                    <span className="font-mono text-[10px] text-paper/50 tabular-nums">{s.ms}ms</span>
+                  </div>
+                  <p className="mt-2 text-sm text-paper/85 leading-snug">{s.summary}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+      )}
 
       {/* Report */}
       {report && (
