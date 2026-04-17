@@ -13,6 +13,11 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        display: ['Fraunces', 'Georgia', 'serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -47,6 +52,16 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        ink: "hsl(var(--ink))",
+        "ink-soft": "hsl(var(--ink-soft))",
+        paper: "hsl(var(--paper))",
+        "paper-warm": "hsl(var(--paper-warm))",
+        oxblood: {
+          DEFAULT: "hsl(var(--oxblood))",
+          deep: "hsl(var(--oxblood-deep))",
+        },
+        amber: "hsl(var(--amber))",
+        celluloid: "hsl(var(--celluloid))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -57,6 +72,15 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        'gradient-noir': 'var(--gradient-noir)',
+        'gradient-editorial': 'var(--gradient-editorial)',
+        'gradient-paper': 'var(--gradient-paper)',
+      },
+      boxShadow: {
+        deep: 'var(--shadow-deep)',
+        print: 'var(--shadow-print)',
       },
       borderRadius: {
         lg: "var(--radius)",
