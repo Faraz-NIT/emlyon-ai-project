@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Database, Loader2, ArrowLeft, Sparkles } from "lucide-react";
+import { FilmStrip, ReelEmblem, OrnamentRule, ProcessingBars } from "@/components/EditorialGraphics";
 
 interface CorpusStats {
   total: number;
@@ -91,8 +92,10 @@ const Admin = () => {
   const running = job && (job.status === "queued" || job.status === "running");
 
   return (
-    <main className="min-h-screen bg-paper grain">
-      <header className="border-b border-ink/15 bg-paper-warm">
+    <main className="min-h-screen bg-paper grain relative">
+      <FilmStrip side="left" />
+      <FilmStrip side="right" />
+      <header className="border-b border-ink/15 bg-paper-warm relative z-10">
         <div className="mx-auto max-w-5xl px-6 py-5 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-ink hover:text-oxblood transition-colors">
             <ArrowLeft className="h-4 w-4" />
@@ -107,20 +110,29 @@ const Admin = () => {
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 py-16">
-        <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-oxblood mb-4">
-          Corpus · Management
+      <section className="mx-auto max-w-5xl px-6 py-16 relative z-10">
+        <div className="flex items-start justify-between gap-8">
+          <div className="flex-1">
+            <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-oxblood mb-4">
+              Corpus · Management
+            </div>
+            <h1 className="font-display font-black text-5xl text-ink leading-tight">
+              Build the <em className="text-oxblood not-italic" style={{ fontStyle: "italic" }}>RAG corpus</em>.
+            </h1>
+            <p className="mt-4 max-w-2xl text-ink-soft">
+              Ingest the TMDB top-5,000 films. Each film's plot is embedded and stored in pgvector.
+              Beats are filled in lazily as queries hit them, then cached forever.
+            </p>
+          </div>
+          <div className="hidden md:block shrink-0 pt-2">
+            <ReelEmblem />
+          </div>
         </div>
-        <h1 className="font-display font-black text-5xl text-ink leading-tight">
-          Build the <em className="text-oxblood not-italic" style={{ fontStyle: "italic" }}>RAG corpus</em>.
-        </h1>
-        <p className="mt-4 max-w-2xl text-ink-soft">
-          Ingest the TMDB top-5,000 films. Each film's plot is embedded with Gemini text-embedding-004
-          and stored in pgvector. Beats are filled in lazily as queries hit them, then cached forever.
-        </p>
+
+        <OrnamentRule label="Corpus Snapshot" />
 
         {/* Stats */}
-        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             ["Total films", stats?.total],
             ["With embeddings", stats?.embedded],
@@ -138,8 +150,13 @@ const Admin = () => {
           ))}
         </div>
 
+        <OrnamentRule label="Ingestion" />
+
         {/* Ingestion controls */}
-        <div className="mt-12 rounded-sm border border-ink/20 bg-paper-warm p-8 shadow-print">
+        <div className="rounded-sm border border-ink/20 bg-paper-warm p-8 shadow-print relative overflow-hidden">
+          <div className="absolute top-6 right-6">
+            <ProcessingBars active={!!running} />
+          </div>
           <h2 className="font-display text-2xl text-ink mb-2">Ingest TMDB 5,000</h2>
           <p className="text-ink-soft text-sm mb-6">
             Runs in the background. Resumable: re-running skips films already in the corpus.
