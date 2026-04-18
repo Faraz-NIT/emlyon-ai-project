@@ -97,7 +97,7 @@ const ScriptDNA = () => {
             <img
               src={emlyonLogo}
               alt="emlyon business school"
-              className="h-9 w-9 rounded-sm shadow-sm"
+              className="h-11 w-11 rounded-sm shadow-sm"
             />
             <Film className="h-5 w-5 text-oxblood" strokeWidth={1.5} />
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
