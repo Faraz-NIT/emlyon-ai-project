@@ -207,7 +207,7 @@ const ScriptDNA = () => {
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-ink/15 pt-6">
             <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
-              Powered by Lovable AI · Gemini 2.5 Pro · RAG corpus
+              Gemini 2.5 Pro · RAG corpus
             </p>
             <button
               type="submit"
