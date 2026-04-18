@@ -1,5 +1,5 @@
 // Agentic Script DNA pipeline using LangGraph.js
-// Nodes: planner -> retriever -> beat_critic -> risk_scorer -> prescriber -> note_writer
+// Nodes: planner -> retriever (vector RAG) -> beat_annotator (lazy) -> beat_critic -> risk_scorer -> prescriber -> note_writer
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { StateGraph, END, START, Annotation } from "npm:@langchain/langgraph@0.2.74";
@@ -14,7 +14,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// ---------- LLM helper (Lovable AI Gateway) ----------
+// ---------- LLM helper (tool-calling) ----------
 async function callLLM(opts: {
   system: string;
   user: string;
@@ -49,16 +49,36 @@ async function callLLM(opts: {
   return JSON.parse(tc.function.arguments);
 }
 
+// ---------- Embedding helper ----------
+async function embed(text: string): Promise<number[]> {
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ model: "google/text-embedding-004", input: text }),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    const err: any = new Error(`Embedding ${res.status}: ${t}`);
+    err.status = res.status;
+    throw err;
+  }
+  const j = await res.json();
+  return j.data[0].embedding;
+}
+
 // ---------- Graph state ----------
 const State = Annotation.Root({
-  // inputs
   title: Annotation<string>(),
   genre: Annotation<string>(),
   logline: Annotation<string>(),
   outline: Annotation<string>(),
-  // working memory
   plan: Annotation<{ search_genres: string[]; structural_keywords: string[]; reasoning: string }>(),
   candidates: Annotation<any[]>(),
+  newly_annotated: Annotation<number>(),
+  cached_annotations: Annotation<number>(),
   matches: Annotation<any[]>(),
   beat_heatmap: Annotation<any[]>(),
   midpoint_risk_score: Annotation<number>(),
@@ -66,7 +86,6 @@ const State = Annotation.Root({
   act3_prescription: Annotation<string[]>(),
   development_note: Annotation<string>(),
   headline: Annotation<string>(),
-  // observability
   trace: Annotation<{ node: string; ms: number; summary: string }[]>({
     reducer: (a, b) => [...(a ?? []), ...(b ?? [])],
     default: () => [],
@@ -94,18 +113,17 @@ async function planner(state: S) {
           search_genres: {
             type: "array",
             items: { type: "string" },
-            description: "Capitalized genre tokens to use for filtering, e.g. ['Heist','Thriller','Crime']. Include adjacent genres.",
+            description: "Capitalized genre tokens, e.g. ['Thriller','Crime']. Match TMDB genre names.",
             minItems: 1,
             maxItems: 6,
           },
           structural_keywords: {
             type: "array",
             items: { type: "string" },
-            description: "Beat-level signatures to look for: e.g. 'midpoint reversal', 'ensemble assembly', 'mentor death'.",
             minItems: 2,
             maxItems: 8,
           },
-          reasoning: { type: "string", description: "One-sentence rationale." },
+          reasoning: { type: "string" },
         },
         required: ["search_genres", "structural_keywords", "reasoning"],
         additionalProperties: false,
@@ -118,41 +136,140 @@ async function planner(state: S) {
   };
 }
 
-// ---------- NODE 2: Retriever (RAG) ----------
+// ---------- NODE 2: Retriever (vector RAG with optional genre filter) ----------
 async function retriever(state: S) {
   const t0 = Date.now();
-  const tokens = state.plan.search_genres;
-  const { data: byGenre } = await supabase
-    .from("films")
-    .select("*")
-    .overlaps("genres", tokens)
-    .limit(40);
-  let candidates = byGenre ?? [];
-  if (candidates.length < 15) {
-    const { data: extra } = await supabase.from("films").select("*").limit(60);
-    const seen = new Set(candidates.map((c) => c.id));
-    for (const f of extra ?? []) if (!seen.has(f.id)) candidates.push(f);
+  const query = `${state.genre}. ${state.logline}\n${state.outline ?? ""}`.trim();
+  const queryEmbedding = await embed(query);
+
+  // First try with genre filter; fall back to no filter if too few results
+  let { data: matched } = await supabase.rpc("match_films", {
+    query_embedding: queryEmbedding as any,
+    match_count: 40,
+    filter_genres: state.plan.search_genres,
+  });
+
+  if (!matched || matched.length < 15) {
+    const { data: broader } = await supabase.rpc("match_films", {
+      query_embedding: queryEmbedding as any,
+      match_count: 40,
+      filter_genres: null,
+    });
+    matched = broader ?? matched ?? [];
   }
-  candidates = candidates.slice(0, 40);
+
+  const candidates = matched ?? [];
   return {
     candidates,
-    ...trace("retriever", t0, `Pulled ${candidates.length} candidate films from corpus`),
+    ...trace(
+      "retriever",
+      t0,
+      `Vector RAG: ${candidates.length} films · top sim ${candidates[0]?.similarity?.toFixed(3) ?? "—"}`,
+    ),
   };
 }
 
-// ---------- NODE 3: Beat Critic (selects 10 structural matches + per-beat critique) ----------
+// ---------- NODE 3: Beat Annotator (lazy, cached) ----------
+async function beatAnnotator(state: S) {
+  const t0 = Date.now();
+  const needAnnotation = state.candidates.filter((c) => !c.beats || Object.keys(c.beats || {}).length === 0);
+  let newly = 0;
+  let cached = state.candidates.length - needAnnotation.length;
+
+  // Annotate up to 15 to keep latency bounded; the rest will be annotated on later queries
+  const toDo = needAnnotation.slice(0, 15);
+
+  for (const film of toDo) {
+    try {
+      const out = await callLLM({
+        model: "google/gemini-2.5-flash",
+        system: `You are a story structure analyst. Given a film's plot overview, infer its 7-beat structure (setup, inciting incident, plot point 1, midpoint, all-is-lost, climax, resolution) plus midpoint outcome and act-3 outcome. Return concise one-line descriptions per beat. If the overview is too short to infer a beat, write "(unclear)".`,
+        user: `TITLE: ${film.title} (${film.year ?? "n/a"})
+GENRES: ${(film.genres ?? []).join(", ")}
+OVERVIEW: ${film.overview}`,
+        tool: {
+          name: "annotate_beats",
+          description: "Extract beat-by-beat structure of a film.",
+          parameters: {
+            type: "object",
+            properties: {
+              beats: {
+                type: "object",
+                properties: {
+                  setup: { type: "string" },
+                  inciting: { type: "string" },
+                  pp1: { type: "string" },
+                  midpoint: { type: "string" },
+                  low: { type: "string" },
+                  climax: { type: "string" },
+                  resolution: { type: "string" },
+                },
+                required: ["setup", "inciting", "pp1", "midpoint", "low", "climax", "resolution"],
+                additionalProperties: false,
+              },
+              strengths: { type: "array", items: { type: "string" }, maxItems: 4 },
+              weaknesses: { type: "array", items: { type: "string" }, maxItems: 4 },
+              midpoint_outcome: { type: "string" },
+              act3_outcome: { type: "string" },
+            },
+            required: ["beats", "strengths", "weaknesses", "midpoint_outcome", "act3_outcome"],
+            additionalProperties: false,
+          },
+        },
+      });
+
+      // Cache to DB
+      await supabase
+        .from("films_corpus")
+        .update({
+          beats: out.beats,
+          strengths: out.strengths,
+          weaknesses: out.weaknesses,
+          midpoint_outcome: out.midpoint_outcome,
+          act3_outcome: out.act3_outcome,
+          beats_annotated_at: new Date().toISOString(),
+        })
+        .eq("id", film.id);
+
+      // Mutate in-memory copy so downstream nodes see it
+      film.beats = out.beats;
+      film.strengths = out.strengths;
+      film.weaknesses = out.weaknesses;
+      film.midpoint_outcome = out.midpoint_outcome;
+      film.act3_outcome = out.act3_outcome;
+      newly++;
+    } catch (e: any) {
+      console.error(`annotate failed for ${film.title}:`, e.message);
+    }
+  }
+
+  return {
+    newly_annotated: newly,
+    cached_annotations: cached,
+    ...trace(
+      "beat_annotator",
+      t0,
+      `Annotated ${newly} new films · ${cached} pre-cached · ${needAnnotation.length - toDo.length} deferred`,
+    ),
+  };
+}
+
+// ---------- NODE 4: Beat Critic ----------
 async function beatCritic(state: S) {
   const t0 = Date.now();
-  const corpus = state.candidates.map((f) => ({
+  // Only feed candidates that have beat data
+  const annotated = state.candidates.filter((f) => f.beats && Object.keys(f.beats).length);
+  const corpus = annotated.slice(0, 30).map((f) => ({
     title: f.title,
     year: f.year,
     genres: f.genres,
-    logline: f.logline,
+    overview: f.overview,
     beats: f.beats,
     strengths: f.strengths,
     weaknesses: f.weaknesses,
     midpoint_outcome: f.midpoint_outcome,
     act3_outcome: f.act3_outcome,
+    similarity: f.similarity,
   }));
 
   const out = await callLLM({
@@ -160,7 +277,7 @@ async function beatCritic(state: S) {
     system: `You are the structural critic node. Match the writer's project to films in the FILM_CORPUS by BEAT ARCHITECTURE — not theme or genre alone. Select the 10 closest structural ancestors and rate the writer's outline beat-by-beat.
 
 Beats: setup, inciting, pp1, midpoint, low, climax, resolution.
-For each beat give a confidence 0-100 (how strong/clear that beat appears in the writer's outline) and a one-line risk_note. Cite only films present in the corpus.`,
+For each beat give a confidence 0-100 and a one-line risk_note. Cite only films present in the corpus.`,
     user: `PROJECT
 Genre: ${state.genre}
 Logline: ${state.logline}
@@ -169,7 +286,7 @@ ${state.outline || "(infer from logline)"}
 
 PLANNER KEYWORDS: ${state.plan.structural_keywords.join(", ")}
 
-FILM_CORPUS:
+FILM_CORPUS (vector-retrieved + beat-annotated):
 ${JSON.stringify(corpus)}`,
     tool: {
       name: "deliver_critique",
@@ -226,16 +343,16 @@ ${JSON.stringify(corpus)}`,
     ...trace(
       "beat_critic",
       t0,
-      `Selected ${out.matches.length} ancestors · top match: ${out.matches[0]?.title} (${out.matches[0]?.similarity})`,
+      `Selected ${out.matches.length} ancestors · top: ${out.matches[0]?.title} (${out.matches[0]?.similarity})`,
     ),
   };
 }
 
-// ---------- NODE 4: Risk Scorer ----------
+// ---------- NODE 5: Risk Scorer ----------
 async function riskScorer(state: S) {
   const t0 = Date.now();
   const out = await callLLM({
-    system: `You are the midpoint-risk node. Given the writer's outline and the known midpoint outcomes of their structural ancestors, predict the probability (0-100) that the writer's draft will collapse at the midpoint. High = likely collapse. Justify with one sentence citing patterns from the matched films.`,
+    system: `You are the midpoint-risk node. Predict probability (0-100) the writer's draft will collapse at the midpoint. High = likely collapse. Justify in one sentence citing patterns from matched films.`,
     user: `OUTLINE:
 ${state.outline || state.logline}
 
@@ -250,7 +367,7 @@ CURRENT MIDPOINT BEAT CONFIDENCE: ${state.beat_heatmap.find((b) => b.beat === "m
         type: "object",
         properties: {
           midpoint_risk_score: { type: "number", minimum: 0, maximum: 100 },
-          midpoint_diagnosis: { type: "string", description: "One sentence; cite ancestor patterns." },
+          midpoint_diagnosis: { type: "string" },
         },
         required: ["midpoint_risk_score", "midpoint_diagnosis"],
         additionalProperties: false,
@@ -264,11 +381,11 @@ CURRENT MIDPOINT BEAT CONFIDENCE: ${state.beat_heatmap.find((b) => b.beat === "m
   };
 }
 
-// ---------- NODE 5: Prescriber ----------
+// ---------- NODE 6: Prescriber ----------
 async function prescriber(state: S) {
   const t0 = Date.now();
   const out = await callLLM({
-    system: `You are the prescription node. Produce exactly 3 concrete, scene-level act-3 moves the writer should make to avoid the failure mode shared by their structural ancestors. Each move must be specific (not generic advice) and reference what would change in the script.`,
+    system: `You are the prescription node. Produce exactly 3 concrete, scene-level act-3 moves. Each must be specific, not generic.`,
     user: `LOGLINE: ${state.logline}
 OUTLINE: ${state.outline || "(none)"}
 ANCESTORS:
@@ -298,12 +415,12 @@ MIDPOINT DIAGNOSIS: ${state.midpoint_diagnosis}`,
   };
 }
 
-// ---------- NODE 6: Note Writer ----------
+// ---------- NODE 7: Note Writer ----------
 async function noteWriter(state: S) {
   const t0 = Date.now();
   const out = await callLLM({
     model: "google/gemini-2.5-pro",
-    system: `You are the development-note writer. Voice: a sharp, candid producer who has read 10,000 scripts. Open with a punchy comparison: "Your X has the same structural DNA as Y — here's what that means for act three." Then 180-260 words of specific, scene-level notes drawing on the ancestor analysis. End with one declarative sentence the writer should pin above their desk.`,
+    system: `You are the development-note writer. Voice: a sharp, candid producer. Open with a punchy comparison: "Your X has the same structural DNA as Y — here's what that means for act three." Then 180-260 words of specific, scene-level notes. End with one declarative sentence the writer should pin above their desk.`,
     user: `PROJECT
 Logline: ${state.logline}
 Genre: ${state.genre}
@@ -318,8 +435,8 @@ ${state.act3_prescription.map((p, i) => `${i + 1}. ${p}`).join("\n")}`,
       parameters: {
         type: "object",
         properties: {
-          headline: { type: "string", description: "One-sentence punchline opener." },
-          development_note: { type: "string", description: "180-260 words." },
+          headline: { type: "string" },
+          development_note: { type: "string" },
         },
         required: ["headline", "development_note"],
         additionalProperties: false,
@@ -337,13 +454,15 @@ ${state.act3_prescription.map((p, i) => `${i + 1}. ${p}`).join("\n")}`,
 const graph = new StateGraph(State)
   .addNode("planner", planner)
   .addNode("retriever", retriever)
+  .addNode("beat_annotator", beatAnnotator)
   .addNode("beat_critic", beatCritic)
   .addNode("risk_scorer", riskScorer)
   .addNode("prescriber", prescriber)
   .addNode("note_writer", noteWriter)
   .addEdge(START, "planner")
   .addEdge("planner", "retriever")
-  .addEdge("retriever", "beat_critic")
+  .addEdge("retriever", "beat_annotator")
+  .addEdge("beat_annotator", "beat_critic")
   .addEdge("beat_critic", "risk_scorer")
   .addEdge("risk_scorer", "prescriber")
   .addEdge("prescriber", "note_writer")
@@ -386,6 +505,8 @@ serve(async (req) => {
         trace: final.trace,
         plan: final.plan,
         corpus_size: final.candidates?.length ?? 0,
+        newly_annotated: final.newly_annotated ?? 0,
+        cached_annotations: final.cached_annotations ?? 0,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

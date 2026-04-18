@@ -14,47 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
-      films: {
+      films_corpus: {
         Row: {
           act3_outcome: string | null
-          beats: Json
+          beats: Json | null
+          beats_annotated_at: string | null
           created_at: string
+          embedding: string | null
           genres: string[]
           id: string
-          logline: string
+          is_gold: boolean
           midpoint_outcome: string | null
-          strengths: string[]
-          summary: string
+          overview: string
+          popularity: number | null
+          strengths: string[] | null
           title: string
-          weaknesses: string[]
+          tmdb_id: number | null
+          updated_at: string
+          weaknesses: string[] | null
           year: number | null
         }
         Insert: {
           act3_outcome?: string | null
-          beats?: Json
+          beats?: Json | null
+          beats_annotated_at?: string | null
           created_at?: string
+          embedding?: string | null
           genres?: string[]
           id?: string
-          logline: string
+          is_gold?: boolean
           midpoint_outcome?: string | null
-          strengths?: string[]
-          summary: string
+          overview: string
+          popularity?: number | null
+          strengths?: string[] | null
           title: string
-          weaknesses?: string[]
+          tmdb_id?: number | null
+          updated_at?: string
+          weaknesses?: string[] | null
           year?: number | null
         }
         Update: {
           act3_outcome?: string | null
-          beats?: Json
+          beats?: Json | null
+          beats_annotated_at?: string | null
           created_at?: string
+          embedding?: string | null
           genres?: string[]
           id?: string
-          logline?: string
+          is_gold?: boolean
           midpoint_outcome?: string | null
-          strengths?: string[]
-          summary?: string
+          overview?: string
+          popularity?: number | null
+          strengths?: string[] | null
           title?: string
-          weaknesses?: string[]
+          tmdb_id?: number | null
+          updated_at?: string
+          weaknesses?: string[] | null
           year?: number | null
         }
         Relationships: []
@@ -64,7 +79,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_films: {
+        Args: {
+          filter_genres?: string[]
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          act3_outcome: string
+          beats: Json
+          genres: string[]
+          id: string
+          is_gold: boolean
+          midpoint_outcome: string
+          overview: string
+          popularity: number
+          similarity: number
+          strengths: string[]
+          title: string
+          weaknesses: string[]
+          year: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
