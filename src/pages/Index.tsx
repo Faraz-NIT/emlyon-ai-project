@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "lucide-react";
+import { AgentPipeline } from "@/components/AgentPipeline";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
 const BEAT_LABEL: Record<Beat, string> = {
@@ -239,6 +240,13 @@ const ScriptDNA = () => {
             </button>
           </div>
         </form>
+
+        {/* Animated agent pipeline — visible while running and after */}
+        {(loading || trace.length > 0) && (
+          <div className="mt-8 animate-fade-in">
+            <AgentPipeline active={loading} trace={trace} />
+          </div>
+        )}
       </section>
 
       {/* Agent trace */}
