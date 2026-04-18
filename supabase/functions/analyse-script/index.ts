@@ -149,7 +149,7 @@ async function planner(state: S) {
 async function retriever(state: S) {
   const t0 = Date.now();
   const query = `${state.genre}. ${state.logline}\n${state.outline ?? ""}`.trim();
-  const queryEmbedding = await embed(query);
+  const queryEmbedding = embed(query);
 
   // First try with genre filter; fall back to no filter if too few results
   let { data: matched } = await supabase.rpc("match_films", {
