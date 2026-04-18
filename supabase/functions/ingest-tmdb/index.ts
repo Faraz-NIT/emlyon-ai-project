@@ -132,38 +132,39 @@ async function runIngest(jobId: string, limit: number) {
       .not("tmdb_id", "is", null);
     const haveIds = new Set((existing ?? []).map((r: any) => r.tmdb_id));
 
-    // 2. Download + parse CSV
+    // 2. Stream CSV and normalise rows on the fly (file is ~23MB)
     const csvRes = await fetch(TMDB_CSV_URL);
     if (!csvRes.ok) throw new Error(`TMDB CSV fetch failed: ${csvRes.status}`);
-    const csv = await csvRes.text();
-    const rows = parseCsv(csv);
 
-    // 3. Normalise
-    const films = rows
-      .map((r) => {
-        const tmdb_id = parseInt(r.Movie_ID ?? r.id, 10);
-        const overview = (r.Movie_Overview ?? r.overview ?? "").trim();
-        const title = (r.Movie_Title ?? r.title ?? r.original_title ?? "").trim();
-        if (!tmdb_id || !overview || !title) return null;
-        const rawGenres = r.Movie_Genre ?? r.genres ?? "";
-        let genres: string[] = [];
-        if (rawGenres.trim().startsWith("[")) {
-          genres = safeJsonArray(rawGenres).map((g: any) => g.name).filter(Boolean);
-        } else {
-          genres = rawGenres
-            .split(/\s+/)
-            .flatMap((tok: string) => tok.split(/(?=[A-Z])/))
-            .map((g: string) => g.trim())
-            .filter(Boolean);
-        }
-        const year = parseYear(r.Movie_Release_Date ?? r.release_date ?? "");
-        const popularity = parseFloat(r.Movie_Popularity ?? r.popularity ?? "0") || 0;
-        return { tmdb_id, title, year, genres, overview, popularity };
-      })
-      .filter((x): x is NonNullable<typeof x> => !!x)
-      .sort((a, b) => b.popularity - a.popularity)
-      .slice(0, limit)
-      .filter((f) => !haveIds.has(f.tmdb_id));
+    const films: {
+      tmdb_id: number; title: string; year: number | null;
+      genres: string[]; overview: string; popularity: number;
+    }[] = [];
+
+    for await (const r of streamCsvRecords(csvRes)) {
+      const tmdb_id = parseInt(r.Movie_ID ?? r.id, 10);
+      const overview = (r.Movie_Overview ?? r.overview ?? "").trim();
+      const title = (r.Movie_Title ?? r.title ?? r.original_title ?? "").trim();
+      if (!tmdb_id || !overview || !title) continue;
+      if (haveIds.has(tmdb_id)) continue;
+      const rawGenres = r.Movie_Genre ?? r.genres ?? "";
+      let genres: string[] = [];
+      if (rawGenres.trim().startsWith("[")) {
+        genres = safeJsonArray(rawGenres).map((g: any) => g.name).filter(Boolean);
+      } else {
+        genres = rawGenres
+          .split(/\s+/)
+          .flatMap((tok: string) => tok.split(/(?=[A-Z])/))
+          .map((g: string) => g.trim())
+          .filter(Boolean);
+      }
+      const year = parseYear(r.Movie_Release_Date ?? r.release_date ?? "");
+      const popularity = parseFloat(r.Movie_Popularity ?? r.popularity ?? "0") || 0;
+      films.push({ tmdb_id, title, year, genres, overview, popularity });
+    }
+
+    films.sort((a, b) => b.popularity - a.popularity);
+    if (films.length > limit) films.length = limit;
 
     if (films.length === 0) {
       await update({
