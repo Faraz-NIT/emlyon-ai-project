@@ -17,34 +17,59 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const TMDB_CSV_URL =
   "https://raw.githubusercontent.com/YBI-Foundation/Dataset/main/Movies%20Recommendation.csv";
 
-// ---------- minimal CSV parser (handles quoted fields with commas) ----------
-function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
+// ---------- Streaming CSV parser ----------
+// Handles a quoted-field RFC-4180-ish CSV without loading the whole file as a
+// JS string at once. Yields one record at a time so we can keep memory low on
+// the 23MB TMDB dataset (the previous all-in-memory char loop was OOM-killed
+// by the edge runtime before producing any rows).
+async function* streamCsvRecords(
+  res: Response,
+): AsyncGenerator<Record<string, string>> {
+  if (!res.body) throw new Error("CSV response has no body");
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+
+  let header: string[] | null = null;
   let cur: string[] = [];
   let field = "";
   let inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQ) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else inQ = false;
-      } else field += c;
-    } else {
-      if (c === '"') inQ = true;
-      else if (c === ",") { cur.push(field); field = ""; }
-      else if (c === "\n") { cur.push(field); rows.push(cur); cur = []; field = ""; }
-      else if (c === "\r") { /* skip */ }
-      else field += c;
+
+  const flushField = () => { cur.push(field); field = ""; };
+  const finishRow = (): Record<string, string> | null => {
+    if (cur.length === 0 && field === "") return null;
+    flushField();
+    const row = cur;
+    cur = [];
+    if (!header) { header = row; return null; }
+    if (row.length !== header.length) return null;
+    const o: Record<string, string> = {};
+    for (let i = 0; i < header.length; i++) o[header[i]] = row[i];
+    return o;
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const text = value;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQ = false;
+        } else field += c;
+      } else {
+        if (c === '"') inQ = true;
+        else if (c === ",") flushField();
+        else if (c === "\n") {
+          const rec = finishRow();
+          if (rec) yield rec;
+        } else if (c === "\r") { /* skip */ }
+        else field += c;
+      }
     }
   }
-  if (field.length || cur.length) { cur.push(field); rows.push(cur); }
-  const header = rows.shift() ?? [];
-  return rows.filter(r => r.length === header.length).map(r => {
-    const o: Record<string, string> = {};
-    header.forEach((h, i) => (o[h] = r[i]));
-    return o;
-  });
+  const rec = finishRow();
+  if (rec) yield rec;
 }
 
 function safeJsonArray(s: string): any[] {
@@ -107,38 +132,39 @@ async function runIngest(jobId: string, limit: number) {
       .not("tmdb_id", "is", null);
     const haveIds = new Set((existing ?? []).map((r: any) => r.tmdb_id));
 
-    // 2. Download + parse CSV
+    // 2. Stream CSV and normalise rows on the fly (file is ~23MB)
     const csvRes = await fetch(TMDB_CSV_URL);
     if (!csvRes.ok) throw new Error(`TMDB CSV fetch failed: ${csvRes.status}`);
-    const csv = await csvRes.text();
-    const rows = parseCsv(csv);
 
-    // 3. Normalise
-    const films = rows
-      .map((r) => {
-        const tmdb_id = parseInt(r.Movie_ID ?? r.id, 10);
-        const overview = (r.Movie_Overview ?? r.overview ?? "").trim();
-        const title = (r.Movie_Title ?? r.title ?? r.original_title ?? "").trim();
-        if (!tmdb_id || !overview || !title) return null;
-        const rawGenres = r.Movie_Genre ?? r.genres ?? "";
-        let genres: string[] = [];
-        if (rawGenres.trim().startsWith("[")) {
-          genres = safeJsonArray(rawGenres).map((g: any) => g.name).filter(Boolean);
-        } else {
-          genres = rawGenres
-            .split(/\s+/)
-            .flatMap((tok: string) => tok.split(/(?=[A-Z])/))
-            .map((g: string) => g.trim())
-            .filter(Boolean);
-        }
-        const year = parseYear(r.Movie_Release_Date ?? r.release_date ?? "");
-        const popularity = parseFloat(r.Movie_Popularity ?? r.popularity ?? "0") || 0;
-        return { tmdb_id, title, year, genres, overview, popularity };
-      })
-      .filter((x): x is NonNullable<typeof x> => !!x)
-      .sort((a, b) => b.popularity - a.popularity)
-      .slice(0, limit)
-      .filter((f) => !haveIds.has(f.tmdb_id));
+    const films: {
+      tmdb_id: number; title: string; year: number | null;
+      genres: string[]; overview: string; popularity: number;
+    }[] = [];
+
+    for await (const r of streamCsvRecords(csvRes)) {
+      const tmdb_id = parseInt(r.Movie_ID ?? r.id, 10);
+      const overview = (r.Movie_Overview ?? r.overview ?? "").trim();
+      const title = (r.Movie_Title ?? r.title ?? r.original_title ?? "").trim();
+      if (!tmdb_id || !overview || !title) continue;
+      if (haveIds.has(tmdb_id)) continue;
+      const rawGenres = r.Movie_Genre ?? r.genres ?? "";
+      let genres: string[] = [];
+      if (rawGenres.trim().startsWith("[")) {
+        genres = safeJsonArray(rawGenres).map((g: any) => g.name).filter(Boolean);
+      } else {
+        genres = rawGenres
+          .split(/\s+/)
+          .flatMap((tok: string) => tok.split(/(?=[A-Z])/))
+          .map((g: string) => g.trim())
+          .filter(Boolean);
+      }
+      const year = parseYear(r.Movie_Release_Date ?? r.release_date ?? "");
+      const popularity = parseFloat(r.Movie_Popularity ?? r.popularity ?? "0") || 0;
+      films.push({ tmdb_id, title, year, genres, overview, popularity });
+    }
+
+    films.sort((a, b) => b.popularity - a.popularity);
+    if (films.length > limit) films.length = limit;
 
     if (films.length === 0) {
       await update({

@@ -1,0 +1,1 @@
+UPDATE public.ingest_jobs SET status='failed', error='Worker killed (CSV too large for in-memory parser); please re-run.', finished_at=now() WHERE status IN ('queued','running');
