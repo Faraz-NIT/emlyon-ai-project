@@ -6,6 +6,7 @@ import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "luc
 import { AgentPipeline } from "@/components/AgentPipeline";
 import { TechStack } from "@/components/TechStack";
 import { CorpusBrowser } from "@/components/CorpusBrowser";
+import { RagPipelineVisualizer } from "@/components/RagPipelineVisualizer";
 import heroDna from "@/assets/hero-dna.jpg";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
@@ -239,6 +240,9 @@ const ScriptDNA = () => {
           </div>
         )}
       </section>
+
+      {/* RAG architecture demonstration */}
+      <RagPipelineVisualizer />
 
       {/* Agent trace */}
       {trace.length > 0 && (
