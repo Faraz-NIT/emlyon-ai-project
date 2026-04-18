@@ -19,7 +19,7 @@ const BEAT_LABEL: Record<Beat, string> = {
 
 interface DnaReport {
   headline: string;
-  matches: { title: string; year?: number; similarity: number; why: string; did_right: string; risk: string }[];
+  matches: { title: string; year?: number; similarity: number; why: string; did_right: string; risk: string; poster_path?: string | null; tmdb_id?: number | null }[];
   beat_heatmap: { beat: Beat; confidence: number; risk_note: string }[];
   midpoint_risk_score: number;
   midpoint_diagnosis: string;
