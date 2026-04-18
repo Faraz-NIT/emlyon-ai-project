@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "lucide-react";
@@ -41,6 +42,19 @@ const ScriptDNA = () => {
   const [report, setReport] = useState<DnaReport | null>(null);
   const [trace, setTrace] = useState<TraceStep[]>([]);
   const [plan, setPlan] = useState<{ search_genres: string[]; structural_keywords: string[]; reasoning: string } | null>(null);
+  const [corpusSize, setCorpusSize] = useState<number | null>(null);
+  const [annotated, setAnnotated] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const [{ count: total }, { count: ann }] = await Promise.all([
+        supabase.from("films_corpus").select("*", { count: "exact", head: true }),
+        supabase.from("films_corpus").select("*", { count: "exact", head: true }).not("beats", "is", null),
+      ]);
+      setCorpusSize(total ?? 0);
+      setAnnotated(ann ?? 0);
+    })();
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,9 +93,21 @@ const ScriptDNA = () => {
               Vol. I · Issue 01 · The Story Lab
             </span>
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
-            LangGraph Agent · 6 nodes · RAG over 59 films
-          </span>
+          <div className="flex items-center gap-5">
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
+              LangGraph · pgvector RAG over{" "}
+              <span className="text-oxblood">{corpusSize?.toLocaleString() ?? "—"}</span> films
+              {annotated !== null && (
+                <span className="text-ink-soft/70"> · {annotated.toLocaleString()} beat-annotated</span>
+              )}
+            </span>
+            <Link
+              to="/admin"
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft hover:text-oxblood underline underline-offset-4"
+            >
+              Admin
+            </Link>
+          </div>
         </div>
       </header>
 
