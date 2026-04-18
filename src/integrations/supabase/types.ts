@@ -27,6 +27,7 @@ export type Database = {
           midpoint_outcome: string | null
           overview: string
           popularity: number | null
+          poster_path: string | null
           strengths: string[] | null
           title: string
           tmdb_id: number | null
@@ -46,6 +47,7 @@ export type Database = {
           midpoint_outcome?: string | null
           overview: string
           popularity?: number | null
+          poster_path?: string | null
           strengths?: string[] | null
           title: string
           tmdb_id?: number | null
@@ -65,6 +67,7 @@ export type Database = {
           midpoint_outcome?: string | null
           overview?: string
           popularity?: number | null
+          poster_path?: string | null
           strengths?: string[] | null
           title?: string
           tmdb_id?: number | null
@@ -133,9 +136,11 @@ export type Database = {
           midpoint_outcome: string
           overview: string
           popularity: number
+          poster_path: string
           similarity: number
           strengths: string[]
           title: string
+          tmdb_id: number
           weaknesses: string[]
           year: number
         }[]

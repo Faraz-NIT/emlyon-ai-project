@@ -19,7 +19,7 @@ const BEAT_LABEL: Record<Beat, string> = {
 
 interface DnaReport {
   headline: string;
-  matches: { title: string; year?: number; similarity: number; why: string; did_right: string; risk: string }[];
+  matches: { title: string; year?: number; similarity: number; why: string; did_right: string; risk: string; poster_path?: string | null; tmdb_id?: number | null }[];
   beat_heatmap: { beat: Beat; confidence: number; risk_note: string }[];
   midpoint_risk_score: number;
   midpoint_diagnosis: string;
@@ -289,7 +289,37 @@ const ScriptDNA = () => {
             <div className="mt-16 grid gap-10 lg:grid-cols-12">
               <div className="lg:col-span-7">
                 <SectionTitle n="01" title="Structural Ancestors" />
-                <ul className="mt-6 divide-y divide-paper/10 border-y border-paper/10">
+
+                {/* Poster wall — TMDB w185 thumbnails for the 10 matches */}
+                {report.matches.some((m) => m.poster_path) && (
+                  <div className="mt-6 grid grid-cols-5 gap-3 sm:gap-4">
+                    {report.matches.map((m, i) => (
+                      <div
+                        key={`poster-${i}`}
+                        className="group relative aspect-[2/3] overflow-hidden rounded-sm border border-paper/15 bg-paper/[0.04]"
+                        title={`${m.title}${m.year ? ` (${m.year})` : ""}`}
+                      >
+                        {m.poster_path ? (
+                          <img
+                            src={`https://image.tmdb.org/t/p/w185${m.poster_path}`}
+                            alt={`${m.title} poster`}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center px-2 text-center font-mono text-[9px] uppercase tracking-[0.2em] text-paper/40">
+                            {m.title}
+                          </div>
+                        )}
+                        <div className="absolute left-1 top-1 rounded-sm bg-ink/80 px-1.5 py-0.5 font-mono text-[9px] tabular-nums text-amber">
+                          {String(i + 1).padStart(2, "0")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <ul className="mt-8 divide-y divide-paper/10 border-y border-paper/10">
                   {report.matches.map((m, i) => (
                     <li key={i} className="py-5 grid grid-cols-12 gap-4 items-baseline">
                       <span className="col-span-1 font-mono text-xs text-amber tabular-nums">

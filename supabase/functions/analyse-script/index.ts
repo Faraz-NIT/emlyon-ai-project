@@ -346,13 +346,26 @@ ${JSON.stringify(corpus)}`,
     },
   });
 
+  // Enrich each match with poster_path + tmdb_id from the candidate corpus
+  // (model returns titles only; we look them up here).
+  const byTitle = new Map<string, any>();
+  for (const c of state.candidates) byTitle.set((c.title || "").toLowerCase(), c);
+  const enriched = (out.matches as any[]).map((m) => {
+    const c = byTitle.get((m.title || "").toLowerCase());
+    return {
+      ...m,
+      poster_path: c?.poster_path ?? null,
+      tmdb_id: c?.tmdb_id ?? null,
+    };
+  });
+
   return {
-    matches: out.matches,
+    matches: enriched,
     beat_heatmap: out.beat_heatmap,
     ...trace(
       "beat_critic",
       t0,
-      `Selected ${out.matches.length} ancestors · top: ${out.matches[0]?.title} (${out.matches[0]?.similarity})`,
+      `Selected ${enriched.length} ancestors · top: ${enriched[0]?.title} (${enriched[0]?.similarity})`,
     ),
   };
 }
