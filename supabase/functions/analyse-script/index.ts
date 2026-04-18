@@ -310,14 +310,14 @@ ${JSON.stringify(corpus)}`,
             items: {
               type: "object",
               properties: {
-                title: { type: "string" },
-                year: { type: "number" },
+                title: { type: "string", description: "EXACT title as it appears in FILM_CORPUS." },
+                year: { type: "number", description: "Release year from FILM_CORPUS — required to disambiguate remakes." },
                 similarity: { type: "number", minimum: 0, maximum: 100 },
                 why: { type: "string" },
                 did_right: { type: "string" },
                 risk: { type: "string" },
               },
-              required: ["title", "similarity", "why", "did_right", "risk"],
+              required: ["title", "year", "similarity", "why", "did_right", "risk"],
               additionalProperties: false,
             },
           },
@@ -346,14 +346,54 @@ ${JSON.stringify(corpus)}`,
     },
   });
 
-  // Enrich each match with poster_path + tmdb_id from the candidate corpus
-  // (model returns titles only; we look them up here).
-  const byTitle = new Map<string, any>();
-  for (const c of state.candidates) byTitle.set((c.title || "").toLowerCase(), c);
+  // Enrich each match with poster_path + tmdb_id from the candidate corpus.
+  // The model returns titles (and usually years); collisions like "The Mummy"
+  // (1999) vs (2017) mean a title-only lookup attaches the wrong poster. We
+  // key by title+year first, fall back to title-only, and as a last resort
+  // do a normalised/fuzzy match. Misses return null instead of a wrong poster.
+  const norm = (s: string) =>
+    (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|a|an)\b/g, "").trim();
+  const byTitleYear = new Map<string, any>();
+  const byTitle = new Map<string, any[]>();
+  const byNorm = new Map<string, any[]>();
+  for (const c of state.candidates) {
+    const t = (c.title || "").toLowerCase();
+    if (c.year) byTitleYear.set(`${t}|${c.year}`, c);
+    if (!byTitle.has(t)) byTitle.set(t, []);
+    byTitle.get(t)!.push(c);
+    const n = norm(c.title || "");
+    if (!byNorm.has(n)) byNorm.set(n, []);
+    byNorm.get(n)!.push(c);
+  }
   const enriched = (out.matches as any[]).map((m) => {
-    const c = byTitle.get((m.title || "").toLowerCase());
+    const t = (m.title || "").toLowerCase();
+    let c: any = m.year ? byTitleYear.get(`${t}|${m.year}`) : undefined;
+    if (!c) {
+      const list = byTitle.get(t);
+      if (list && list.length === 1) c = list[0];
+      else if (list && m.year) {
+        // pick the title-match with closest year
+        c = list.reduce((best: any, cur: any) =>
+          !best ? cur : Math.abs((cur.year ?? 0) - m.year) < Math.abs((best.year ?? 0) - m.year) ? cur : best,
+          null);
+      }
+    }
+    if (!c) {
+      const list = byNorm.get(norm(m.title || ""));
+      if (list && list.length) {
+        c = m.year
+          ? list.reduce((best: any, cur: any) =>
+              !best ? cur : Math.abs((cur.year ?? 0) - m.year) < Math.abs((best.year ?? 0) - m.year) ? cur : best,
+              null)
+          : list[0];
+      }
+    }
     return {
       ...m,
+      // If we couldn't confidently resolve the candidate, prefer the model's
+      // title/year as-is and return null poster rather than mislabelling.
+      title: c?.title ?? m.title,
+      year: c?.year ?? m.year,
       poster_path: c?.poster_path ?? null,
       tmdb_id: c?.tmdb_id ?? null,
     };
