@@ -240,6 +240,13 @@ const ScriptDNA = () => {
             </button>
           </div>
         </form>
+
+        {/* Animated agent pipeline — visible while running and after */}
+        {(loading || trace.length > 0) && (
+          <div className="mt-8 animate-fade-in">
+            <AgentPipeline active={loading} trace={trace} />
+          </div>
+        )}
       </section>
 
       {/* Agent trace */}
