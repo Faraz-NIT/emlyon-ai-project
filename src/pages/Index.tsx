@@ -8,6 +8,7 @@ import { TechStack } from "@/components/TechStack";
 import { CorpusBrowser } from "@/components/CorpusBrowser";
 import { RagPipelineVisualizer } from "@/components/RagPipelineVisualizer";
 import heroDna from "@/assets/hero-dna.jpg";
+import emlyonLogo from "@/assets/emlyon-logo.png";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
 const BEAT_LABEL: Record<Beat, string> = {
@@ -92,7 +93,12 @@ const ScriptDNA = () => {
       {/* Masthead */}
       <header className="border-b border-ink/15 bg-paper-warm">
         <div className="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            <img
+              src={emlyonLogo}
+              alt="emlyon business school"
+              className="h-9 w-9 rounded-sm shadow-sm"
+            />
             <Film className="h-5 w-5 text-oxblood" strokeWidth={1.5} />
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
               Vol. I · Issue 01 · The Story Lab
