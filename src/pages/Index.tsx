@@ -134,7 +134,13 @@ const ScriptDNA = () => {
             </p>
           </div>
           <aside className="lg:col-span-5">
-            <HeroDNA />
+            <img
+              src={heroDna}
+              alt="Story DNA helix entwined with a film strip — editorial illustration"
+              width={1024}
+              height={1280}
+              className="w-full h-auto rounded-sm border border-ink/15 shadow-print"
+            />
           </aside>
         </div>
       </section>
