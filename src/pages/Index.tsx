@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "lucide-react";
 import { AgentPipeline } from "@/components/AgentPipeline";
-import { HeroDNA } from "@/components/HeroDNA";
+import heroDna from "@/assets/hero-dna.jpg";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
 const BEAT_LABEL: Record<Beat, string> = {
@@ -134,7 +134,13 @@ const ScriptDNA = () => {
             </p>
           </div>
           <aside className="lg:col-span-5">
-            <HeroDNA />
+            <img
+              src={heroDna}
+              alt="Story DNA helix entwined with a film strip — editorial illustration"
+              width={1024}
+              height={1280}
+              className="w-full h-auto rounded-sm border border-ink/15 shadow-print"
+            />
           </aside>
         </div>
       </section>
@@ -201,7 +207,7 @@ const ScriptDNA = () => {
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-ink/15 pt-6">
             <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
-              Powered by Lovable AI · Gemini 2.5 Pro · RAG corpus
+              Gemini 2.5 Pro · RAG corpus
             </p>
             <button
               type="submit"
