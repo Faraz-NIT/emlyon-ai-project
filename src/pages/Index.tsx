@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "lucide-react";
 import { AgentPipeline } from "@/components/AgentPipeline";
 import { TechStack } from "@/components/TechStack";
+import { CorpusBrowser } from "@/components/CorpusBrowser";
 import heroDna from "@/assets/hero-dna.jpg";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
@@ -104,6 +105,7 @@ const ScriptDNA = () => {
                 <span className="text-ink-soft/70"> · {annotated.toLocaleString()} beat-annotated</span>
               )}
             </span>
+            <CorpusBrowser />
             <Link
               to="/admin"
               className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft hover:text-oxblood underline underline-offset-4"
