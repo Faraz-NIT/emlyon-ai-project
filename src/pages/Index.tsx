@@ -310,24 +310,34 @@ const ScriptDNA = () => {
                     {report.matches.map((m, i) => (
                       <div
                         key={`poster-${i}`}
-                        className="group relative aspect-[2/3] overflow-hidden rounded-sm border border-paper/15 bg-paper/[0.04]"
+                        className="group"
                         title={`${m.title}${m.year ? ` (${m.year})` : ""}`}
                       >
-                        {m.poster_path ? (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w185${m.poster_path}`}
-                            alt={`${m.title} poster`}
-                            loading="lazy"
-                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center px-2 text-center font-mono text-[9px] uppercase tracking-[0.2em] text-paper/40">
-                            {m.title}
+                        <div className="relative aspect-[2/3] overflow-hidden rounded-sm border border-paper/15 bg-paper/[0.04]">
+                          {m.poster_path ? (
+                            <img
+                              src={`https://image.tmdb.org/t/p/w185${m.poster_path}`}
+                              alt={`${m.title} poster`}
+                              loading="lazy"
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center px-2 text-center font-mono text-[9px] uppercase tracking-[0.2em] text-paper/40">
+                              {m.title}
+                            </div>
+                          )}
+                          <div className="absolute left-1 top-1 rounded-sm bg-ink/80 px-1.5 py-0.5 font-mono text-[9px] tabular-nums text-amber">
+                            {String(i + 1).padStart(2, "0")}
+                          </div>
+                        </div>
+                        <div className="mt-1.5 font-display text-[11px] leading-tight text-paper line-clamp-2">
+                          {m.title}
+                        </div>
+                        {m.year && (
+                          <div className="font-mono text-[9px] tabular-nums text-paper/50">
+                            {m.year}
                           </div>
                         )}
-                        <div className="absolute left-1 top-1 rounded-sm bg-ink/80 px-1.5 py-0.5 font-mono text-[9px] tabular-nums text-amber">
-                          {String(i + 1).padStart(2, "0")}
-                        </div>
                       </div>
                     ))}
                   </div>
