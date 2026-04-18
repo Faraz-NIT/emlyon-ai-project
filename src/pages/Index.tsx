@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "lucide-react";
 import { AgentPipeline } from "@/components/AgentPipeline";
+import { TechStack } from "@/components/TechStack";
 import heroDna from "@/assets/hero-dna.jpg";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
@@ -132,6 +133,7 @@ const ScriptDNA = () => {
               find the ten closest structural matches, and deliver a development note that predicts where
               your draft will collapse — and how to save it.
             </p>
+            <TechStack />
           </div>
           <aside className="lg:col-span-5">
             <img
