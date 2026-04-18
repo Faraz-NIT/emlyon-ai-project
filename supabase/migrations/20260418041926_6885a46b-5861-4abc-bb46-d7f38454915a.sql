@@ -1,0 +1,1 @@
+TRUNCATE TABLE public.films_corpus, public.ingest_jobs RESTART IDENTITY;
