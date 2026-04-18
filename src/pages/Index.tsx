@@ -133,6 +133,7 @@ const ScriptDNA = () => {
               find the ten closest structural matches, and deliver a development note that predicts where
               your draft will collapse — and how to save it.
             </p>
+            <TechStack />
           </div>
           <aside className="lg:col-span-5">
             <img
