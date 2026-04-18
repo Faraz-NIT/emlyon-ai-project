@@ -74,6 +74,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ingest_jobs: {
+        Row: {
+          error: string | null
+          finished_at: string | null
+          id: string
+          inserted: number
+          limit_requested: number
+          message: string | null
+          processed: number
+          started_at: string
+          status: string
+          total: number
+        }
+        Insert: {
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          limit_requested?: number
+          message?: string | null
+          processed?: number
+          started_at?: string
+          status?: string
+          total?: number
+        }
+        Update: {
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          inserted?: number
+          limit_requested?: number
+          message?: string | null
+          processed?: number
+          started_at?: string
+          status?: string
+          total?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
