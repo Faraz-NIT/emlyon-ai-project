@@ -11,7 +11,23 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY") ?? "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Fetch poster_path from TMDB for a single tmdb_id. Returns null on any failure.
+async function fetchPosterPath(tmdbId: number): Promise<string | null> {
+  if (!TMDB_API_KEY) return null;
+  try {
+    const r = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`,
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j?.poster_path as string) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // Public mirror of a TMDB-derived movies dataset (YBI Foundation, ~5k films)
 const TMDB_CSV_URL =
