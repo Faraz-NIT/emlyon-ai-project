@@ -206,6 +206,8 @@ async function runIngest(jobId: string, limit: number) {
       );
       try {
         const embeddings = await embedBatch(inputs);
+        // Fetch posters in parallel for this batch
+        const posters = await Promise.all(chunk.map((f) => fetchPosterPath(f.tmdb_id)));
         const rowsToInsert = chunk.map((f, idx) => ({
           tmdb_id: f.tmdb_id,
           title: f.title,
@@ -214,6 +216,7 @@ async function runIngest(jobId: string, limit: number) {
           overview: f.overview,
           popularity: f.popularity,
           is_gold: false,
+          poster_path: posters[idx],
           embedding: embeddings[idx] as any,
         }));
         const { error } = await supabase
