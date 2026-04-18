@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Film, Sparkles, AlertTriangle, ChevronRight, Quote } from "lucide-react";
 import { AgentPipeline } from "@/components/AgentPipeline";
+import { HeroDNA } from "@/components/HeroDNA";
 
 type Beat = "setup" | "inciting" | "pp1" | "midpoint" | "low" | "climax" | "resolution";
 const BEAT_LABEL: Record<Beat, string> = {
