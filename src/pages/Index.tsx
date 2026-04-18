@@ -105,6 +105,7 @@ const ScriptDNA = () => {
                 <span className="text-ink-soft/70"> · {annotated.toLocaleString()} beat-annotated</span>
               )}
             </span>
+            <CorpusBrowser />
             <Link
               to="/admin"
               className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft hover:text-oxblood underline underline-offset-4"
