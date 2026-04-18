@@ -13,9 +13,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Public mirror of the TMDB 5000 dataset (Kaggle community CSV)
+// Public mirror of a TMDB-derived movies dataset (YBI Foundation, ~5k films)
 const TMDB_CSV_URL =
-  "https://raw.githubusercontent.com/Lakshmi-1212/Movie-Recommender-System/main/tmdb_5000_movies.csv";
+  "https://raw.githubusercontent.com/YBI-Foundation/Dataset/main/Movies%20Recommendation.csv";
 
 // ---------- minimal CSV parser (handles quoted fields with commas) ----------
 function parseCsv(text: string): Record<string, string>[] {
@@ -49,6 +49,16 @@ function parseCsv(text: string): Record<string, string>[] {
 
 function safeJsonArray(s: string): any[] {
   try { return JSON.parse(s || "[]"); } catch { return []; }
+}
+
+// Parses release date in either "DD-MM-YYYY" or "YYYY-MM-DD" form
+function parseYear(s: string): number | null {
+  if (!s) return null;
+  const m1 = s.match(/^(\d{4})-/);
+  if (m1) return parseInt(m1[1], 10);
+  const m2 = s.match(/-(\d{4})$/);
+  if (m2) return parseInt(m2[1], 10);
+  return null;
 }
 
 // ---------- Embed a batch with Lovable AI Gateway (Gemini text-embedding-004) ----------
@@ -96,16 +106,28 @@ serve(async (req) => {
     const csv = await csvRes.text();
     const rows = parseCsv(csv);
 
-    // 3. Normalise rows
+    // 3. Normalise rows (YBI schema: Movie_ID, Movie_Title, Movie_Genre, Movie_Overview, Movie_Popularity, Movie_Release_Date)
     const films = rows
       .map((r) => {
-        const tmdb_id = parseInt(r.id, 10);
-        const overview = (r.overview ?? "").trim();
-        const title = (r.title ?? r.original_title ?? "").trim();
+        const tmdb_id = parseInt(r.Movie_ID ?? r.id, 10);
+        const overview = (r.Movie_Overview ?? r.overview ?? "").trim();
+        const title = (r.Movie_Title ?? r.title ?? r.original_title ?? "").trim();
         if (!tmdb_id || !overview || !title) return null;
-        const genres = safeJsonArray(r.genres).map((g: any) => g.name).filter(Boolean);
-        const year = r.release_date ? parseInt(r.release_date.slice(0, 4), 10) : null;
-        const popularity = parseFloat(r.popularity ?? "0") || 0;
+        // Genres column is a space-separated string in this dataset, fallback to TMDB JSON if present
+        const rawGenres = r.Movie_Genre ?? r.genres ?? "";
+        let genres: string[] = [];
+        if (rawGenres.trim().startsWith("[")) {
+          genres = safeJsonArray(rawGenres).map((g: any) => g.name).filter(Boolean);
+        } else {
+          // Split CamelCase tokens "CrimeComedy" → ["Crime","Comedy"], or split on whitespace
+          genres = rawGenres
+            .split(/\s+/)
+            .flatMap((tok: string) => tok.split(/(?=[A-Z])/))
+            .map((g: string) => g.trim())
+            .filter(Boolean);
+        }
+        const year = parseYear(r.Movie_Release_Date ?? r.release_date ?? "");
+        const popularity = parseFloat(r.Movie_Popularity ?? r.popularity ?? "0") || 0;
         return { tmdb_id, title, year, genres, overview, popularity };
       })
       .filter((x): x is NonNullable<typeof x> => !!x)
