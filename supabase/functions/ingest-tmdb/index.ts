@@ -139,7 +139,40 @@ async function runIngest(jobId: string, limit: number) {
     supabase.from("ingest_jobs").update(patch).eq("id", jobId);
 
   try {
-    await update({ status: "running", message: "Fetching CSV…" });
+    await update({ status: "running", message: "Backfilling posters for existing films…" });
+
+    // 0. Backfill poster_path for any existing rows that don't have one yet.
+    //    Only runs when TMDB_API_KEY is configured. Capped per job to keep
+    //    runtime bounded; subsequent jobs continue from where we left off.
+    if (TMDB_API_KEY) {
+      const { data: needPosters } = await supabase
+        .from("films_corpus")
+        .select("id, tmdb_id")
+        .is("poster_path", null)
+        .not("tmdb_id", "is", null)
+        .limit(500);
+      if (needPosters && needPosters.length) {
+        const batch = 20;
+        for (let i = 0; i < needPosters.length; i += batch) {
+          const slice = needPosters.slice(i, i + batch);
+          const paths = await Promise.all(
+            slice.map((r: any) => fetchPosterPath(r.tmdb_id)),
+          );
+          await Promise.all(
+            slice.map((r: any, idx: number) =>
+              paths[idx]
+                ? supabase
+                    .from("films_corpus")
+                    .update({ poster_path: paths[idx] })
+                    .eq("id", r.id)
+                : Promise.resolve(),
+            ),
+          );
+        }
+      }
+    }
+
+    await update({ message: "Fetching CSV…" });
 
     // 1. Existing tmdb_ids (resumable)
     const { data: existing } = await supabase
