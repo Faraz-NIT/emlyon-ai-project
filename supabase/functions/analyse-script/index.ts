@@ -268,7 +268,9 @@ async function beatCritic(state: S) {
   const t0 = Date.now();
   // Only feed candidates that have beat data
   const annotated = state.candidates.filter((f) => f.beats && Object.keys(f.beats).length);
-  const corpus = annotated.slice(0, 30).map((f) => ({
+  const corpus = annotated.slice(0, 30).map((f, index) => ({
+    candidate_key: `C${String(index + 1).padStart(2, "0")}`,
+    id: f.id,
     title: f.title,
     year: f.year,
     genres: f.genres,
@@ -280,13 +282,15 @@ async function beatCritic(state: S) {
     act3_outcome: f.act3_outcome,
     similarity: f.similarity,
   }));
+  const corpusKeys = corpus.map((f) => f.candidate_key);
 
   const out = await callLLM({
     model: "google/gemini-2.5-pro",
     system: `You are the structural critic node. Match the writer's project to films in the FILM_CORPUS by BEAT ARCHITECTURE — not theme or genre alone. Select the 10 closest structural ancestors and rate the writer's outline beat-by-beat.
 
 Beats: setup, inciting, pp1, midpoint, low, climax, resolution.
-For each beat give a confidence 0-100 and a one-line risk_note. Cite only films present in the corpus.`,
+For each beat give a confidence 0-100 and a one-line risk_note. Cite only films present in the corpus.
+Every selected match MUST use the exact candidate_key from FILM_CORPUS so downstream UI can attach the right poster and metadata.`,
     user: `PROJECT
 Genre: ${state.genre}
 Logline: ${state.logline}
@@ -310,6 +314,11 @@ ${JSON.stringify(corpus)}`,
             items: {
               type: "object",
               properties: {
+                candidate_key: {
+                  type: "string",
+                  enum: corpusKeys,
+                  description: "Exact candidate_key from FILM_CORPUS for this selected film.",
+                },
                 title: { type: "string", description: "EXACT title as it appears in FILM_CORPUS." },
                 year: { type: "number", description: "Release year from FILM_CORPUS — required to disambiguate remakes." },
                 similarity: { type: "number", minimum: 0, maximum: 100 },
@@ -317,7 +326,7 @@ ${JSON.stringify(corpus)}`,
                 did_right: { type: "string" },
                 risk: { type: "string" },
               },
-              required: ["title", "year", "similarity", "why", "did_right", "risk"],
+              required: ["candidate_key", "title", "year", "similarity", "why", "did_right", "risk"],
               additionalProperties: false,
             },
           },
@@ -346,52 +355,11 @@ ${JSON.stringify(corpus)}`,
     },
   });
 
-  // Enrich each match with poster_path + tmdb_id from the candidate corpus.
-  // The model returns titles (and usually years); collisions like "The Mummy"
-  // (1999) vs (2017) mean a title-only lookup attaches the wrong poster. We
-  // key by title+year first, fall back to title-only, and as a last resort
-  // do a normalised/fuzzy match. Misses return null instead of a wrong poster.
-  const norm = (s: string) =>
-    (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(the|a|an)\b/g, "").trim();
-  const byTitleYear = new Map<string, any>();
-  const byTitle = new Map<string, any[]>();
-  const byNorm = new Map<string, any[]>();
-  for (const c of state.candidates) {
-    const t = (c.title || "").toLowerCase();
-    if (c.year) byTitleYear.set(`${t}|${c.year}`, c);
-    if (!byTitle.has(t)) byTitle.set(t, []);
-    byTitle.get(t)!.push(c);
-    const n = norm(c.title || "");
-    if (!byNorm.has(n)) byNorm.set(n, []);
-    byNorm.get(n)!.push(c);
-  }
+  const byCandidateKey = new Map(corpus.map((film) => [film.candidate_key, film]));
   const enriched = (out.matches as any[]).map((m) => {
-    const t = (m.title || "").toLowerCase();
-    let c: any = m.year ? byTitleYear.get(`${t}|${m.year}`) : undefined;
-    if (!c) {
-      const list = byTitle.get(t);
-      if (list && list.length === 1) c = list[0];
-      else if (list && m.year) {
-        // pick the title-match with closest year
-        c = list.reduce((best: any, cur: any) =>
-          !best ? cur : Math.abs((cur.year ?? 0) - m.year) < Math.abs((best.year ?? 0) - m.year) ? cur : best,
-          null);
-      }
-    }
-    if (!c) {
-      const list = byNorm.get(norm(m.title || ""));
-      if (list && list.length) {
-        c = m.year
-          ? list.reduce((best: any, cur: any) =>
-              !best ? cur : Math.abs((cur.year ?? 0) - m.year) < Math.abs((best.year ?? 0) - m.year) ? cur : best,
-              null)
-          : list[0];
-      }
-    }
+    const c = byCandidateKey.get(m.candidate_key);
     return {
       ...m,
-      // If we couldn't confidently resolve the candidate, prefer the model's
-      // title/year as-is and return null poster rather than mislabelling.
       title: c?.title ?? m.title,
       year: c?.year ?? m.year,
       poster_path: c?.poster_path ?? null,
