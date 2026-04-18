@@ -61,26 +61,35 @@ function parseYear(s: string): number | null {
   return null;
 }
 
-// ---------- Embed a batch with Lovable AI Gateway (Gemini text-embedding-004) ----------
-async function embedBatch(texts: string[]): Promise<number[][]> {
-  // Lovable AI Gateway uses OpenAI-compatible /embeddings
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/text-embedding-004",
-      input: texts,
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Embedding API ${res.status}: ${t}`);
+// ---------- Deterministic hashed pseudo-embedding (768-dim, L2-normalized) ----------
+// Lovable AI Gateway has no embeddings endpoint, so we use a lexical hash
+// embedding. Must stay in sync with analyse-script/index.ts so vectors align.
+const EMBED_DIM = 768;
+function hashStr(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
   }
-  const json = await res.json();
-  return json.data.map((d: any) => d.embedding);
+  return h;
+}
+function embedOne(text: string): number[] {
+  const v = new Array<number>(EMBED_DIM).fill(0);
+  const tokens = (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t) => t.length > 2);
+  for (const tok of tokens) {
+    const h1 = hashStr(tok);
+    const h2 = hashStr("salt:" + tok);
+    v[h1 % EMBED_DIM] += 1;
+    v[h2 % EMBED_DIM] += 1;
+  }
+  let norm = 0;
+  for (const x of v) norm += x * x;
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < EMBED_DIM; i++) v[i] /= norm;
+  return v;
+}
+async function embedBatch(texts: string[]): Promise<number[][]> {
+  return texts.map(embedOne);
 }
 
 // ---------- Background worker ----------
