@@ -83,43 +83,39 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
   return json.data.map((d: any) => d.embedding);
 }
 
-// ---------- Main ingestion ----------
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+// ---------- Background worker ----------
+async function runIngest(jobId: string, limit: number) {
+  const update = (patch: Record<string, unknown>) =>
+    supabase.from("ingest_jobs").update(patch).eq("id", jobId);
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const limit: number = Math.min(body?.limit ?? 5000, 5000);
-    const batchSize = 50; // embedding batch
-    const startedAt = Date.now();
+    await update({ status: "running", message: "Fetching CSV…" });
 
-    // 1. Find which tmdb_ids we already have (resumable)
+    // 1. Existing tmdb_ids (resumable)
     const { data: existing } = await supabase
       .from("films_corpus")
       .select("tmdb_id")
       .not("tmdb_id", "is", null);
     const haveIds = new Set((existing ?? []).map((r: any) => r.tmdb_id));
 
-    // 2. Download CSV
+    // 2. Download + parse CSV
     const csvRes = await fetch(TMDB_CSV_URL);
     if (!csvRes.ok) throw new Error(`TMDB CSV fetch failed: ${csvRes.status}`);
     const csv = await csvRes.text();
     const rows = parseCsv(csv);
 
-    // 3. Normalise rows (YBI schema: Movie_ID, Movie_Title, Movie_Genre, Movie_Overview, Movie_Popularity, Movie_Release_Date)
+    // 3. Normalise
     const films = rows
       .map((r) => {
         const tmdb_id = parseInt(r.Movie_ID ?? r.id, 10);
         const overview = (r.Movie_Overview ?? r.overview ?? "").trim();
         const title = (r.Movie_Title ?? r.title ?? r.original_title ?? "").trim();
         if (!tmdb_id || !overview || !title) return null;
-        // Genres column is a space-separated string in this dataset, fallback to TMDB JSON if present
         const rawGenres = r.Movie_Genre ?? r.genres ?? "";
         let genres: string[] = [];
         if (rawGenres.trim().startsWith("[")) {
           genres = safeJsonArray(rawGenres).map((g: any) => g.name).filter(Boolean);
         } else {
-          // Split CamelCase tokens "CrimeComedy" → ["Crime","Comedy"], or split on whitespace
           genres = rawGenres
             .split(/\s+/)
             .flatMap((tok: string) => tok.split(/(?=[A-Z])/))
@@ -136,62 +132,90 @@ serve(async (req) => {
       .filter((f) => !haveIds.has(f.tmdb_id));
 
     if (films.length === 0) {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          message: "Corpus already up-to-date.",
-          inserted: 0,
-          already_present: haveIds.size,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      await update({
+        status: "done",
+        message: "Corpus already up-to-date.",
+        total: 0,
+        finished_at: new Date().toISOString(),
+      });
+      return;
     }
 
+    await update({ total: films.length, message: "Embedding & inserting…" });
+
     // 4. Batch embed + insert
+    const batchSize = 50;
     let inserted = 0;
+    let processed = 0;
+
     for (let i = 0; i < films.length; i += batchSize) {
       const chunk = films.slice(i, i + batchSize);
       const inputs = chunk.map(
         (f) => `${f.title} (${f.year ?? "n/a"}) — Genres: ${f.genres.join(", ")}. ${f.overview}`,
       );
-      let embeddings: number[][];
       try {
-        embeddings = await embedBatch(inputs);
+        const embeddings = await embedBatch(inputs);
+        const rowsToInsert = chunk.map((f, idx) => ({
+          tmdb_id: f.tmdb_id,
+          title: f.title,
+          year: f.year,
+          genres: f.genres,
+          overview: f.overview,
+          popularity: f.popularity,
+          is_gold: false,
+          embedding: embeddings[idx] as any,
+        }));
+        const { error } = await supabase
+          .from("films_corpus")
+          .upsert(rowsToInsert, { onConflict: "tmdb_id" });
+        if (!error) inserted += rowsToInsert.length;
+        else console.error("Insert error:", error.message);
       } catch (e: any) {
         console.error(`Embedding batch ${i} failed:`, e.message);
-        // Skip this batch but keep going
-        continue;
       }
-
-      const rowsToInsert = chunk.map((f, idx) => ({
-        tmdb_id: f.tmdb_id,
-        title: f.title,
-        year: f.year,
-        genres: f.genres,
-        overview: f.overview,
-        popularity: f.popularity,
-        is_gold: false,
-        embedding: embeddings[idx] as any,
-      }));
-
-      const { error } = await supabase
-        .from("films_corpus")
-        .upsert(rowsToInsert, { onConflict: "tmdb_id" });
-      if (error) {
-        console.error("Insert error:", error.message);
-        continue;
-      }
-      inserted += rowsToInsert.length;
+      processed += chunk.length;
+      await update({ processed, inserted });
     }
 
+    await update({
+      status: "done",
+      message: `Inserted ${inserted} of ${films.length}.`,
+      finished_at: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    console.error("runIngest fatal:", e);
+    await supabase
+      .from("ingest_jobs")
+      .update({
+        status: "failed",
+        error: e?.message ?? String(e),
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", jobId);
+  }
+}
+
+// ---------- HTTP entry: queue a background job and return immediately ----------
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const limit: number = Math.min(body?.limit ?? 5000, 5000);
+
+    const { data: job, error: jobErr } = await supabase
+      .from("ingest_jobs")
+      .insert({ status: "queued", limit_requested: limit })
+      .select()
+      .single();
+    if (jobErr || !job) throw new Error(jobErr?.message ?? "Failed to create job");
+
+    // Run in background — function returns immediately, worker keeps going
+    // @ts-ignore EdgeRuntime is provided by Supabase Edge runtime
+    EdgeRuntime.waitUntil(runIngest(job.id, limit));
+
     return new Response(
-      JSON.stringify({
-        ok: true,
-        inserted,
-        skipped_already_present: haveIds.size,
-        total_in_csv: rows.length,
-        ms: Date.now() - startedAt,
-      }),
+      JSON.stringify({ ok: true, job_id: job.id, status: "queued", limit }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e: any) {
