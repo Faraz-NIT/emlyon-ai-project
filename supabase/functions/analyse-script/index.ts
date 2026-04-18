@@ -271,10 +271,12 @@ async function beatCritic(state: S) {
   const corpus = annotated.slice(0, 30).map((f, index) => ({
     candidate_key: `C${String(index + 1).padStart(2, "0")}`,
     id: f.id,
+    tmdb_id: f.tmdb_id,
     title: f.title,
     year: f.year,
     genres: f.genres,
     overview: f.overview,
+    poster_path: f.poster_path,
     beats: f.beats,
     strengths: f.strengths,
     weaknesses: f.weaknesses,
