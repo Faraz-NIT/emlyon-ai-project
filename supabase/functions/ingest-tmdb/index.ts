@@ -17,34 +17,59 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const TMDB_CSV_URL =
   "https://raw.githubusercontent.com/YBI-Foundation/Dataset/main/Movies%20Recommendation.csv";
 
-// ---------- minimal CSV parser (handles quoted fields with commas) ----------
-function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
+// ---------- Streaming CSV parser ----------
+// Handles a quoted-field RFC-4180-ish CSV without loading the whole file as a
+// JS string at once. Yields one record at a time so we can keep memory low on
+// the 23MB TMDB dataset (the previous all-in-memory char loop was OOM-killed
+// by the edge runtime before producing any rows).
+async function* streamCsvRecords(
+  res: Response,
+): AsyncGenerator<Record<string, string>> {
+  if (!res.body) throw new Error("CSV response has no body");
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+
+  let header: string[] | null = null;
   let cur: string[] = [];
   let field = "";
   let inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQ) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else inQ = false;
-      } else field += c;
-    } else {
-      if (c === '"') inQ = true;
-      else if (c === ",") { cur.push(field); field = ""; }
-      else if (c === "\n") { cur.push(field); rows.push(cur); cur = []; field = ""; }
-      else if (c === "\r") { /* skip */ }
-      else field += c;
+
+  const flushField = () => { cur.push(field); field = ""; };
+  const finishRow = (): Record<string, string> | null => {
+    if (cur.length === 0 && field === "") return null;
+    flushField();
+    const row = cur;
+    cur = [];
+    if (!header) { header = row; return null; }
+    if (row.length !== header.length) return null;
+    const o: Record<string, string> = {};
+    for (let i = 0; i < header.length; i++) o[header[i]] = row[i];
+    return o;
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const text = value;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQ = false;
+        } else field += c;
+      } else {
+        if (c === '"') inQ = true;
+        else if (c === ",") flushField();
+        else if (c === "\n") {
+          const rec = finishRow();
+          if (rec) yield rec;
+        } else if (c === "\r") { /* skip */ }
+        else field += c;
+      }
     }
   }
-  if (field.length || cur.length) { cur.push(field); rows.push(cur); }
-  const header = rows.shift() ?? [];
-  return rows.filter(r => r.length === header.length).map(r => {
-    const o: Record<string, string> = {};
-    header.forEach((h, i) => (o[h] = r[i]));
-    return o;
-  });
+  const rec = finishRow();
+  if (rec) yield rec;
 }
 
 function safeJsonArray(s: string): any[] {
