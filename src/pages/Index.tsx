@@ -134,27 +134,7 @@ const ScriptDNA = () => {
             </p>
           </div>
           <aside className="lg:col-span-5">
-            <div className="rounded-sm border border-ink/15 bg-card p-6 shadow-print">
-              <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink-soft mb-3">The Agent · LangGraph pipeline</div>
-              <ol className="space-y-3 text-sm text-ink">
-                {[
-                  ["01", "Planner", "Decides which genres and structural keywords to retrieve."],
-                  ["02", "Retriever", "RAG over the curated film corpus by genre overlap."],
-                  ["03", "Beat Critic", "Selects 10 ancestors, rates each beat 0–100."],
-                  ["04", "Risk Scorer", "Predicts midpoint collapse probability."],
-                  ["05", "Prescriber", "Drafts 3 surgical act-3 moves."],
-                  ["06", "Note Writer", "Produces the development note."],
-                ].map(([n, t, d]) => (
-                  <li key={n} className="flex gap-3">
-                    <span className="font-mono text-[10px] text-oxblood mt-1">{n}</span>
-                    <span>
-                      <span className="font-display font-bold">{t}.</span>{" "}
-                      <span className="text-ink-soft">{d}</span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </div>
+            <HeroDNA />
           </aside>
         </div>
       </section>
