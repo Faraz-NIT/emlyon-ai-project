@@ -143,7 +143,7 @@ const ScriptDNA = () => {
             />
             <Film className="h-5 w-5 text-oxblood" strokeWidth={1.5} />
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">
-              Vol. I · Issue 01 · The Story Lab
+              The Story Lab
             </span>
           </div>
           <div className="flex items-center gap-5">
