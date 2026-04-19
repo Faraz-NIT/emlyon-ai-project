@@ -31,14 +31,56 @@ interface DnaReport {
   development_note: string;
 }
 
-const SAMPLE = {
-  title: "The Last Vault",
-  genre: "Heist, Thriller",
-  logline:
-    "A retired forger is blackmailed into joining her ex-husband's crew to steal back a painting that could expose them all.",
-  outline:
-    "Act 1: Mira lives quietly restoring art. Her ex Daniel reappears with proof of her old crimes. She agrees to one job.\nAct 2A: The crew assembles, scouts the museum, plans the lift around a charity gala.\nMidpoint: The painting they're stealing is a forgery — Mira's own.\nAct 2B: Daniel was working a side angle. Mira goes off-script.\nAct 3: Confrontation in the vault. Mira walks out with the real piece, leaves Daniel for the law.",
-};
+const SAMPLES = [
+  {
+    title: "The Last Vault",
+    genre: "Heist, Thriller",
+    logline:
+      "A retired forger is blackmailed into joining her ex-husband's crew to steal back a painting that could expose them all.",
+    outline:
+      "Act 1: Mira lives quietly restoring art. Her ex Daniel reappears with proof of her old crimes. She agrees to one job.\nAct 2A: The crew assembles, scouts the museum, plans the lift around a charity gala.\nMidpoint: The painting they're stealing is a forgery — Mira's own.\nAct 2B: Daniel was working a side angle. Mira goes off-script.\nAct 3: Confrontation in the vault. Mira walks out with the real piece, leaves Daniel for the law.",
+  },
+  {
+    title: "Hollow Ground",
+    genre: "Psychological Horror",
+    logline:
+      "A grief counsellor moves to her late mother's remote farmhouse and begins hearing confessions from the walls — voices that know things only the dead should know.",
+    outline:
+      "Act 1: Nadia arrives at the farmhouse to settle the estate. Strange sounds begin. A neighbour warns her the house 'keeps things'.\nAct 2A: She discovers her mother recorded dying patients' final confessions and hid the tapes inside the walls.\nMidpoint: One voice is her own — a session she has no memory of attending.\nAct 2B: Nadia realises she was a patient, not a counsellor. Her identity is constructed.\nAct 3: She burns the tapes. Walks out. The house keeps talking.",
+  },
+  {
+    title: "Second Wind",
+    genre: "Sports Drama",
+    logline:
+      "A disgraced marathon coach is given one last chance: turn a 40-year-old postal worker with no running history into an Olympic qualifier in fourteen months.",
+    outline:
+      "Act 1: Coach Ray takes the job to pay off debts. Elsa, his unlikely athlete, shows up in work boots.\nAct 2A: Brutal training. Ray's methods are unorthodox; Elsa improves but their relationship frays.\nMidpoint: At the qualifier trial Ray discovers Elsa has a heart condition she hid. He must decide whether to pull her.\nAct 2B: He doesn't pull her. She finishes — but collapses. Both face consequences.\nAct 3: A year later, Elsa lines up at the Olympic trials. Ray watches from the stands, credential-less.",
+  },
+  {
+    title: "The Understudy",
+    genre: "Dark Comedy",
+    logline:
+      "When the lead actor of a struggling West End production dies on opening night, the understudy — who may have poisoned him — must now carry the show and the secret.",
+    outline:
+      "Act 1: Desmond has waited twelve years for a role. The lead, a vain tyrant, gets poisoned at the curtain call. Desmond steps in.\nAct 2A: The show is a hit. Desmond becomes a star. A detective begins sniffing around.\nMidpoint: Desmond finds a second vial in his own dressing room — planted there. Someone else knows.\nAct 2B: The cast turns on each other. Three people had motive. The detective closes in on all of them.\nAct 3: The real poisoner takes a bow. Desmond covers for them. The show must go on.",
+  },
+  {
+    title: "Meridian",
+    genre: "Science Fiction, Drama",
+    logline:
+      "The sole survivor of a generation ship's engine failure must choose between waking the colonists 200 years early — in deep space — or letting them sleep past their only habitable window.",
+    outline:
+      "Act 1: Kai wakes from cryosleep to alarms. The ship is drifting. Everyone else is still under.\nAct 2A: Kai runs diagnostics, records logs, speaks to the ship's AI for company. Calculates the window.\nMidpoint: The AI reveals it was programmed to wake Kai specifically — there is no malfunction. This is a test.\nAct 2B: Kai refuses to play along. Searches for the real fault. Finds it: a decision the mission architects buried.\nAct 3: Kai wakes one engineer, shares what was found. Together they choose a third option no one planned for.",
+  },
+  {
+    title: "Mother Tongue",
+    genre: "Drama",
+    logline:
+      "A translator at a war crimes tribunal discovers that the defendant — whose words she is rendering into English — is her estranged father.",
+    outline:
+      "Act 1: Sena is assigned to a high-profile trial. She recognises the voice before she sees the face.\nAct 2A: She stays on the case. Her translations are faithful but she is unravelling. Flashbacks to childhood.\nMidpoint: The prosecution asks her to translate a document that would convict him. She mistranslates a single word — and knows it.\nAct 2B: The defence calls her father to the stand. His testimony contradicts the document. Sena must correct the record.\nAct 3: She testifies against her own translation. Her father is convicted. They do not speak.",
+  },
+];
 
 interface TraceStep { node: string; ms: number; summary: string }
 
@@ -164,13 +206,23 @@ const ScriptDNA = () => {
         >
           <div className="flex items-baseline justify-between mb-6 flex-wrap gap-3">
             <h2 className="font-display text-3xl text-ink">Submit your project</h2>
-            <button
-              type="button"
-              onClick={() => setForm(SAMPLE)}
-              className="font-mono text-[11px] uppercase tracking-[0.2em] text-oxblood hover:text-oxblood-deep underline underline-offset-4"
-            >
-              Load sample script →
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-soft">Sample →</span>
+              <select
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-oxblood bg-transparent border-b border-oxblood/40 focus:border-oxblood focus:outline-none cursor-pointer"
+                defaultValue=""
+                onChange={(e) => {
+                  const s = SAMPLES.find((s) => s.title === e.target.value);
+                  if (s) setForm(s);
+                  e.target.value = "";
+                }}
+              >
+                <option value="" disabled>Choose…</option>
+                {SAMPLES.map((s) => (
+                  <option key={s.title} value={s.title}>{s.title}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">

@@ -312,7 +312,7 @@ ${JSON.stringify(corpus)}`,
         properties: {
           matches: {
             type: "array",
-            minItems: 5,
+            minItems: 1,
             maxItems: 10,
             items: {
               type: "object",
