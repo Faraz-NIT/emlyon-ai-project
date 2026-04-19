@@ -31,7 +31,7 @@ const LOGOS: Logo[] = [
     ),
   },
   {
-    name: "Gemini 2.5",
+    name: "Llama 3.3 70B",
     tag: "reasoning model",
     svg: (
       <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">

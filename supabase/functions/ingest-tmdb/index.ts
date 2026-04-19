@@ -13,18 +13,29 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TMDB_API_KEY = Deno.env.get("TMDB_API_KEY") ?? "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// Fetch poster_path from TMDB for a single tmdb_id. Returns null on any failure.
-async function fetchPosterPath(tmdbId: number): Promise<string | null> {
-  if (!TMDB_API_KEY) return null;
+// Search TMDB by title (+ optional year) and return the verified tmdb_id and poster_path.
+// Using search avoids mismatches from incorrect Movie_IDs in the CSV source.
+async function fetchTmdbByTitle(
+  title: string,
+  year: number | null,
+): Promise<{ tmdb_id: number | null; poster_path: string | null }> {
+  if (!TMDB_API_KEY) return { tmdb_id: null, poster_path: null };
   try {
+    const query = encodeURIComponent(title);
+    const yearParam = year ? `&year=${year}` : "";
     const r = await fetch(
-      `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${TMDB_API_KEY}`,
+      `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${query}${yearParam}`,
     );
-    if (!r.ok) return null;
+    if (!r.ok) return { tmdb_id: null, poster_path: null };
     const j = await r.json();
-    return (j?.poster_path as string) ?? null;
+    const result = j?.results?.[0];
+    if (!result) return { tmdb_id: null, poster_path: null };
+    return {
+      tmdb_id: result.id ?? null,
+      poster_path: result.poster_path ?? null,
+    };
   } catch {
-    return null;
+    return { tmdb_id: null, poster_path: null };
   }
 }
 
@@ -146,23 +157,22 @@ async function runIngest(jobId: string, limit: number) {
     if (TMDB_API_KEY) {
       const { data: needPosters } = await supabase
         .from("films_corpus")
-        .select("id, tmdb_id")
+        .select("id, title, year")
         .is("poster_path", null)
-        .not("tmdb_id", "is", null)
         .limit(500);
       if (needPosters && needPosters.length) {
         const batch = 20;
         for (let i = 0; i < needPosters.length; i += batch) {
           const slice = needPosters.slice(i, i + batch);
-          const paths = await Promise.all(
-            slice.map((r: any) => fetchPosterPath(r.tmdb_id)),
+          const results = await Promise.all(
+            slice.map((r: any) => fetchTmdbByTitle(r.title, r.year)),
           );
           await Promise.all(
             slice.map((r: any, idx: number) =>
-              paths[idx]
+              results[idx].poster_path
                 ? supabase
                     .from("films_corpus")
-                    .update({ poster_path: paths[idx] })
+                    .update({ poster_path: results[idx].poster_path, tmdb_id: results[idx].tmdb_id })
                     .eq("id", r.id)
                 : Promise.resolve(),
             ),
@@ -238,17 +248,17 @@ async function runIngest(jobId: string, limit: number) {
       );
       try {
         const embeddings = await embedBatch(inputs);
-        // Fetch posters in parallel for this batch
-        const posters = await Promise.all(chunk.map((f) => fetchPosterPath(f.tmdb_id)));
+        // Search TMDB by title to get verified tmdb_id and matching poster_path
+        const tmdbResults = await Promise.all(chunk.map((f) => fetchTmdbByTitle(f.title, f.year)));
         const rowsToInsert = chunk.map((f, idx) => ({
-          tmdb_id: f.tmdb_id,
+          tmdb_id: tmdbResults[idx].tmdb_id ?? f.tmdb_id,
           title: f.title,
           year: f.year,
           genres: f.genres,
           overview: f.overview,
           popularity: f.popularity,
           is_gold: false,
-          poster_path: posters[idx],
+          poster_path: tmdbResults[idx].poster_path,
           embedding: embeddings[idx] as any,
         }));
         const { error } = await supabase

@@ -358,9 +358,13 @@ ${JSON.stringify(corpus)}`,
     },
   });
 
-  const byCandidateKey = new Map(corpus.map((film) => [film.candidate_key, film]));
+  const byCandidateKey = new Map(corpus.map((film: any) => [film.candidate_key, film]));
+  const byTitle = new Map(corpus.map((film: any) => [film.title.toLowerCase(), film]));
   const enriched = (out.matches as any[]).map((m) => {
-    const c = byCandidateKey.get(m.candidate_key);
+    const byKey = byCandidateKey.get(m.candidate_key) as any;
+    // If the key resolves to a different title than the LLM claimed, prefer title lookup
+    const titleMatches = byKey?.title?.toLowerCase() === m.title?.toLowerCase();
+    const c = titleMatches ? byKey : (byTitle.get(m.title?.toLowerCase()) ?? byKey);
     return {
       ...m,
       title: c?.title ?? m.title,

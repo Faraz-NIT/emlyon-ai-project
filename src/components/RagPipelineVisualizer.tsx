@@ -62,7 +62,7 @@ const STAGES = [
   { key: "embed", label: "Embed", sub: "768-dim vector", icon: Binary },
   { key: "search", label: "Retrieve", sub: "pgvector cosine", icon: Database },
   { key: "context", label: "Context", sub: "Top-K assembly", icon: Layers },
-  { key: "llm", label: "Generate", sub: "Gemini 2.5", icon: Sparkles },
+  { key: "llm", label: "Generate", sub: "Llama 3.3 70B", icon: Sparkles },
 ] as const;
 
 const SAMPLE_QUERY =
@@ -421,7 +421,7 @@ export const RagPipelineVisualizer = () => {
               </div>
               <p className="mt-2 text-sm text-ink leading-relaxed">
                 The 6 retrieved films above are formatted into a structured prompt and sent to
-                Gemini 2.5 Pro, which grounds its analysis in this evidence — no hallucinated
+                Llama 3.3 70B (via Groq), which grounds its analysis in this evidence — no hallucinated
                 ancestors. To run the full multi-agent flow (planner → critic → risk → prescriber →
                 note), submit a project in the form above.
                 <ChevronRight className="inline h-3 w-3 ml-1 text-oxblood" />
