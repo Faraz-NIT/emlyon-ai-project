@@ -186,11 +186,13 @@ async function beatAnnotator(state: S) {
   let newly = 0;
   let cached = state.candidates.length - needAnnotation.length;
 
-  // Annotate up to 5 per request to stay within Groq free-tier rate limits; cache fills over time
-  const toDo = needAnnotation.slice(0, 5);
+  // 8b model has its own Groq quota (separate from 70b); 15 annotations is safe
+  const toDo = needAnnotation.slice(0, 15);
 
   for (const film of toDo) {
     try {
+      // Small delay to spread requests and avoid burst rate limits
+      if (toDo.indexOf(film) > 0) await new Promise((r) => setTimeout(r, 150));
       const out = await callLLM({
         model: "llama-3.1-8b-instant",
         system: `You are a story structure analyst. Given a film's plot overview, infer its 7-beat structure (setup, inciting incident, plot point 1, midpoint, all-is-lost, climax, resolution) plus midpoint outcome and act-3 outcome. Return concise one-line descriptions per beat. If the overview is too short to infer a beat, write "(unclear)".`,
@@ -285,8 +287,6 @@ async function beatCritic(state: S) {
     act3_outcome: f.act3_outcome,
     similarity: f.similarity,
   }));
-  const corpusKeys = corpus.map((f) => f.candidate_key);
-
   const out = await callLLM({
     model: "llama-3.3-70b-versatile",
     system: `You are the structural critic node. Match the writer's project to films in the FILM_CORPUS by BEAT ARCHITECTURE — not theme or genre alone. Select the 10 closest structural ancestors and rate the writer's outline beat-by-beat.
@@ -312,48 +312,34 @@ ${JSON.stringify(corpus)}`,
         properties: {
           matches: {
             type: "array",
-            minItems: 1,
-            maxItems: 10,
             items: {
               type: "object",
               properties: {
-                candidate_key: {
-                  type: "string",
-                  enum: corpusKeys,
-                  description: "Exact candidate_key from FILM_CORPUS for this selected film.",
-                },
-                title: { type: "string", description: "EXACT title as it appears in FILM_CORPUS." },
-                year: { type: "number", description: "Release year from FILM_CORPUS — required to disambiguate remakes." },
-                similarity: { type: "number", minimum: 0, maximum: 100 },
+                candidate_key: { type: "string" },
+                title: { type: "string" },
+                year: { type: "number" },
+                similarity: { type: "number" },
                 why: { type: "string" },
                 did_right: { type: "string" },
                 risk: { type: "string" },
               },
               required: ["candidate_key", "title", "year", "similarity", "why", "did_right", "risk"],
-              additionalProperties: false,
             },
           },
           beat_heatmap: {
             type: "array",
-            minItems: 7,
-            maxItems: 7,
             items: {
               type: "object",
               properties: {
-                beat: {
-                  type: "string",
-                  enum: ["setup", "inciting", "pp1", "midpoint", "low", "climax", "resolution"],
-                },
-                confidence: { type: "number", minimum: 0, maximum: 100 },
+                beat: { type: "string" },
+                confidence: { type: "number" },
                 risk_note: { type: "string" },
               },
               required: ["beat", "confidence", "risk_note"],
-              additionalProperties: false,
             },
           },
         },
         required: ["matches", "beat_heatmap"],
-        additionalProperties: false,
       },
     },
   });
