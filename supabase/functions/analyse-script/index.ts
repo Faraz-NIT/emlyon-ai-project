@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ---------- LLM helper (tool-calling) ----------
@@ -21,14 +21,15 @@ async function callLLM(opts: {
   tool: { name: string; description: string; parameters: any };
   model?: string;
 }): Promise<any> {
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const model = opts.model ?? "llama-3.3-70b-versatile";
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${GROQ_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: opts.model ?? "google/gemini-2.5-flash",
+      model,
       messages: [
         { role: "system", content: opts.system },
         { role: "user", content: opts.user },
@@ -185,13 +186,13 @@ async function beatAnnotator(state: S) {
   let newly = 0;
   let cached = state.candidates.length - needAnnotation.length;
 
-  // Annotate up to 15 to keep latency bounded; the rest will be annotated on later queries
-  const toDo = needAnnotation.slice(0, 15);
+  // Annotate up to 5 per request to stay within Groq free-tier rate limits; cache fills over time
+  const toDo = needAnnotation.slice(0, 5);
 
   for (const film of toDo) {
     try {
       const out = await callLLM({
-        model: "google/gemini-2.5-flash",
+        model: "llama-3.1-8b-instant",
         system: `You are a story structure analyst. Given a film's plot overview, infer its 7-beat structure (setup, inciting incident, plot point 1, midpoint, all-is-lost, climax, resolution) plus midpoint outcome and act-3 outcome. Return concise one-line descriptions per beat. If the overview is too short to infer a beat, write "(unclear)".`,
         user: `TITLE: ${film.title} (${film.year ?? "n/a"})
 GENRES: ${(film.genres ?? []).join(", ")}
@@ -287,7 +288,7 @@ async function beatCritic(state: S) {
   const corpusKeys = corpus.map((f) => f.candidate_key);
 
   const out = await callLLM({
-    model: "google/gemini-2.5-pro",
+    model: "llama-3.3-70b-versatile",
     system: `You are the structural critic node. Match the writer's project to films in the FILM_CORPUS by BEAT ARCHITECTURE — not theme or genre alone. Select the 10 closest structural ancestors and rate the writer's outline beat-by-beat.
 
 Beats: setup, inciting, pp1, midpoint, low, climax, resolution.
@@ -451,7 +452,7 @@ MIDPOINT DIAGNOSIS: ${state.midpoint_diagnosis}`,
 async function noteWriter(state: S) {
   const t0 = Date.now();
   const out = await callLLM({
-    model: "google/gemini-2.5-pro",
+    model: "llama-3.3-70b-versatile",
     system: `You are the development-note writer. Voice: a sharp, candid producer. Open with a punchy comparison: "Your X has the same structural DNA as Y — here's what that means for act three." Then 180-260 words of specific, scene-level notes. End with one declarative sentence the writer should pin above their desk.`,
     user: `PROJECT
 Logline: ${state.logline}
@@ -548,8 +549,6 @@ serve(async (req) => {
     const message =
       status === 429
         ? "Rate limit reached. Please wait a moment and try again."
-        : status === 402
-        ? "AI credits exhausted. Add credits in Settings → Workspace → Usage."
         : e?.message ?? "Unknown error";
     return new Response(JSON.stringify({ error: message }), {
       status,
