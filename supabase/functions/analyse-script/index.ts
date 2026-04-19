@@ -323,7 +323,7 @@ ${JSON.stringify(corpus)}`,
                 did_right: { type: "string" },
                 risk: { type: "string" },
               },
-              required: ["candidate_key", "title", "year", "similarity", "why", "did_right", "risk"],
+              required: ["candidate_key", "title", "year", "similarity", "why"],
             },
           },
           beat_heatmap: {

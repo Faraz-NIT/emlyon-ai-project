@@ -23,7 +23,7 @@ const BEAT_LABEL: Record<Beat, string> = {
 
 interface DnaReport {
   headline: string;
-  matches: { title: string; year?: number; similarity: number; why: string; did_right: string; risk: string; poster_path?: string | null; tmdb_id?: number | null }[];
+  matches: { title: string; year?: number; similarity: number; why: string; did_right?: string; risk?: string; poster_path?: string | null; tmdb_id?: number | null }[];
   beat_heatmap: { beat: Beat; confidence: number; risk_note: string }[];
   midpoint_risk_score: number;
   midpoint_diagnosis: string;
@@ -406,16 +406,22 @@ const ScriptDNA = () => {
                           {m.title} <span className="text-paper/50 text-base">{m.year ? `(${m.year})` : ""}</span>
                         </div>
                         <p className="text-sm text-paper/70 mt-1">{m.why}</p>
-                        <div className="mt-2 grid sm:grid-cols-2 gap-2 text-xs">
-                          <span className="text-paper/80">
-                            <span className="text-amber font-mono">+ </span>
-                            {m.did_right}
-                          </span>
-                          <span className="text-paper/80">
-                            <span className="text-oxblood font-mono">⚠ </span>
-                            {m.risk}
-                          </span>
-                        </div>
+                        {(m.did_right || m.risk) && (
+                          <div className="mt-2 grid sm:grid-cols-2 gap-2 text-xs">
+                            {m.did_right && (
+                              <span className="text-paper/80">
+                                <span className="text-amber font-mono">+ </span>
+                                {m.did_right}
+                              </span>
+                            )}
+                            {m.risk && (
+                              <span className="text-paper/80">
+                                <span className="text-oxblood font-mono">⚠ </span>
+                                {m.risk}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="col-span-3 text-right">
                         <div className="font-display text-3xl text-amber tabular-nums">{m.similarity}</div>
