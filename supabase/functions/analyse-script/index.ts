@@ -293,7 +293,8 @@ async function beatCritic(state: S) {
 
 Beats: setup, inciting, pp1, midpoint, low, climax, resolution.
 For each beat give a confidence 0-100 and a one-line risk_note. Cite only films present in the corpus.
-Every selected match MUST use the exact candidate_key from FILM_CORPUS so downstream UI can attach the right poster and metadata.`,
+Every selected match MUST use the exact candidate_key from FILM_CORPUS so downstream UI can attach the right poster and metadata.
+Every match MUST include a "why" field: one sentence explaining why this film is a structural ancestor (beat-level reasoning, not theme).`,
     user: `PROJECT
 Genre: ${state.genre}
 Logline: ${state.logline}
@@ -319,7 +320,7 @@ ${JSON.stringify(corpus)}`,
                 title: { type: "string" },
                 year: { type: "number" },
                 similarity: { type: "number" },
-                why: { type: "string" },
+                why: { type: "string", description: "One sentence: why this film is a structural ancestor (beat-level reasoning)." },
                 did_right: { type: "string" },
                 risk: { type: "string" },
               },
